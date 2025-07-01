@@ -20,6 +20,7 @@ if not st.session_state['logged_in']:
             else:
                 st.error("Username/password salah")
     st.stop()
+
 # ------------------ Tombol Logout ------------------ #
 st.markdown("""
     <style>
@@ -50,76 +51,76 @@ with st.expander("📊 AMR", expanded=False):
 param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float, float))}
 
 # ------------------ Parameter Threshold Section ------------------ #
-with st.expander("⚙️ Setting Parameter"):
-    st.markdown("""
-    Operasi Logika yang digunakan di sini adalah **OR**. Dengan demikian, indikator yang sesuai dengan salah satu spesifikasi aturan tersebut akan di-highlight berwarna hijau cerah dan berkontribusi pada perhitungan potensi TO.
-    """)
+ with st.expander("⚙️ Setting Parameter"):
+        st.markdown("""
+        Operasi Logika yang digunakan di sini adalah **OR**. Dengan demikian, indikator yang sesuai dengan salah satu spesifikasi aturan tersebut akan di-highlight berwarna hijau cerah dan berkontribusi pada perhitungan potensi TO.
+        """)
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown("#### Tegangan Drop")
-        st.number_input("Set Batas Atas Tegangan Menengah (tm)", key="v_tm_max", value=56.0)
-        st.number_input("Set Batas Atas Tegangan Rendah (tr)", key="v_tr_max", value=180.0)
-        st.number_input("Set Batas Bawah Arus Besar tm", key="i_tm_min", value=0.5)
-        st.number_input("Set Batas Bawah Arus Besar tr", key="i_tr_min", value=0.5)
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.markdown("#### Tegangan Drop")
+            st.number_input("Set Batas Atas Tegangan Menengah (tm)", key="v_tm_max", value=56.0)
+            st.number_input("Set Batas Atas Tegangan Rendah (tr)", key="v_tr_max", value=180.0)
+            st.number_input("Set Batas Bawah Arus Besar tm", key="i_tm_min", value=0.5)
+            st.number_input("Set Batas Bawah Arus Besar tr", key="i_tr_min", value=0.5)
 
-        st.markdown("#### Arus Netral vs Arus Maks")
-        st.number_input("Set Batas Bawah Arus Netral tm", key="neutral_tm", value=1.0)
-        st.number_input("Set Batas Bawah Arus Netral tr", key="neutral_tr", value=10.0)
+            st.markdown("#### Arus Netral vs Arus Maks")
+            st.number_input("Set Batas Bawah Arus Netral tm", key="neutral_tm", value=1.0)
+            st.number_input("Set Batas Bawah Arus Netral tr", key="neutral_tr", value=10.0)
 
-        st.markdown("#### Reverse Power")
-        st.number_input("Set Non Aktif Power TM", key="reverse_p_tm", value=0.0)
-        st.number_input("Set Non Aktif Power TR", key="reverse_p_tr", value=0.0)
-        st.number_input("Set Batas Bawah Arus Reverse Power TM", key="reverse_i_tm", value=0.5)
-        st.number_input("Set Batas Bawah Arus Reverse Power TR", key="reverse_i_tr", value=0.7)
+            st.markdown("#### Reverse Power")
+            st.number_input("Set Non Aktif Power TM", key="reverse_p_tm", value=0.0)
+            st.number_input("Set Non Aktif Power TR", key="reverse_p_tr", value=0.0)
+            st.number_input("Set Batas Bawah Arus Reverse Power TM", key="reverse_i_tm", value=0.5)
+            st.number_input("Set Batas Bawah Arus Reverse Power TR", key="reverse_i_tr", value=0.7)
 
-    with col2:
-        st.markdown("#### Tegangan Hilang")
-        st.number_input("Nilai Tegangan Menengah Hilang (tm)", key="v_tm_zero", value=0.0)
-        st.number_input("Nilai Tegangan Rendah Hilang (tr)", key="v_tr_zero", value=0.0)
-        st.number_input("Set Batas Bawah Arus Besar tm", key="loss_tm_i", value=-1.0)
-        st.number_input("Set Batas Bawah Arus Besar tr", key="loss_tr_i", value=-1.0)
+        with col2:
+            st.markdown("#### Tegangan Hilang")
+            st.number_input("Nilai Tegangan Menengah Hilang (tm)", key="v_tm_zero", value=0.0)
+            st.number_input("Nilai Tegangan Rendah Hilang (tr)", key="v_tr_zero", value=0.0)
+            st.number_input("Set Batas Bawah Arus Besar tm", key="loss_tm_i", value=-1.0)
+            st.number_input("Set Batas Bawah Arus Besar tr", key="loss_tr_i", value=-1.0)
 
-        st.markdown("#### Arus Unbalance")
-        st.number_input("Toleransi Unbalance TM", key="unbal_tol_tm", value=0.5)
-        st.number_input("Toleransi Unbalance TR", key="unbal_tol_tr", value=0.5)
-        st.number_input("Set Batas Bawah Arus Unbalance TM", key="unbal_i_tm", value=0.5)
-        st.number_input("Set Batas Bawah Arus Unbalance TR", key="unbal_i_tr", value=1.0)
+            st.markdown("#### Arus Unbalance")
+            st.number_input("Toleransi Unbalance TM", key="unbal_tol_tm", value=0.5)
+            st.number_input("Toleransi Unbalance TR", key="unbal_tol_tr", value=0.5)
+            st.number_input("Set Batas Bawah Arus Unbalance TM", key="unbal_i_tm", value=0.5)
+            st.number_input("Set Batas Bawah Arus Unbalance TR", key="unbal_i_tr", value=1.0)
 
-        st.markdown("#### Active Power Lost")
-        st.number_input("Set Batas Bawah Arus P Lost", key="plost_i_min", value=0.5)
+            st.markdown("#### Active Power Lost")
+            st.number_input("Set Batas Bawah Arus P Lost", key="plost_i_min", value=0.5)
 
-    with col3:
-        st.markdown("#### Cos Phi Kecil")
-        st.number_input("Cos Phi Max TM", key="cos_phi_tm", value=0.4)
-        st.number_input("Cos Phi Max TR", key="cos_phi_tr", value=0.4)
-        st.number_input("Set Batas Arus Besar tm", key="cos_i_tm", value=0.8)
-        st.number_input("Set Batas Arus Besar tr", key="cos_i_tr", value=0.8)
+        with col3:
+            st.markdown("#### Cos Phi Kecil")
+            st.number_input("Cos Phi Max TM", key="cos_phi_tm", value=0.4)
+            st.number_input("Cos Phi Max TR", key="cos_phi_tr", value=0.4)
+            st.number_input("Set Batas Arus Besar tm", key="cos_i_tm", value=0.8)
+            st.number_input("Set Batas Arus Besar tr", key="cos_i_tr", value=0.8)
 
-        st.markdown("#### Arus < Tegangan Kecil")
-        st.number_input("Set Selisih Tegangan TM", key="low_v_diff_tm", value=2.0)
-        st.number_input("Set Selisih Tegangan TR", key="low_v_diff_tr", value=8.0)
+            st.markdown("#### Arus < Tegangan Kecil")
+            st.number_input("Set Selisih Tegangan TM", key="low_v_diff_tm", value=2.0)
+            st.number_input("Set Selisih Tegangan TR", key="low_v_diff_tr", value=8.0)
 
-    with col4:
-        st.markdown("#### Arus Hilang")
-        st.number_input("Set Batas Arus Hilang pada TM", key="loss_i_tm", value=0.02)
-        st.number_input("Set Batas Arus Hilang pada TR", key="loss_i_tr", value=0.02)
-        st.number_input("Set Batas Bawah Arus Maksimum tm", key="max_i_tm", value=1.0)
-        st.number_input("Set Batas Bawah Arus Maksimum tr", key="max_i_tr", value=1.0)
+        with col4:
+            st.markdown("#### Arus Hilang")
+            st.number_input("Set Batas Arus Hilang pada TM", key="loss_i_tm", value=0.02)
+            st.number_input("Set Batas Arus Hilang pada TR", key="loss_i_tr", value=0.02)
+            st.number_input("Set Batas Bawah Arus Maksimum tm", key="max_i_tm", value=1.0)
+            st.number_input("Set Batas Bawah Arus Maksimum tr", key="max_i_tr", value=1.0)
 
-        st.markdown("#### Over Current (Tak Langsung)")
-        st.number_input("Set Batas bawah Arus Maks pada TM", key="over_i_tm", value=5.0)
-        st.number_input("Set Batas bawah Arus Maks pada TR", key="over_i_tr", value=5.0)
+            st.markdown("#### Over Current (Tak Langsung)")
+            st.number_input("Set Batas bawah Arus Maks pada TM", key="over_i_tm", value=5.0)
+            st.number_input("Set Batas bawah Arus Maks pada TR", key="over_i_tr", value=5.0)
 
-        st.markdown("#### Over Voltage")
-        st.number_input("Tegangan Maksimum TM", key="vmax_tm", value=62.0)
-        st.number_input("Tegangan Maksimum TR", key="vmax_tr", value=241.0)
+            st.markdown("#### Over Voltage")
+            st.number_input("Tegangan Maksimum TM", key="vmax_tm", value=62.0)
+            st.number_input("Tegangan Maksimum TR", key="vmax_tr", value=241.0)
 
-    st.markdown("---")
-    st.markdown("### Kriteria TO")
-    st.number_input("Jumlah Indikator ≥", key="min_indicator", value=1)
-    st.number_input("Jumlah Bobot ≥", key="min_weight", value=2)
-    st.number_input("Banyak Data yang Ditampilkan", key="top_limit", value=50)
+        st.markdown("---")
+        st.markdown("### Kriteria TO")
+        st.number_input("Jumlah Indikator ≥", key="min_indicator", value=1)
+        st.number_input("Jumlah Bobot ≥", key="min_weight", value=2)
+        st.number_input("Banyak Data yang Ditampilkan", key="top_limit", value=50)
 
 # ------------------ Fungsi Cek ------------------ #
 def cek_indikator(row):
