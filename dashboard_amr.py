@@ -189,25 +189,34 @@ tab1, tab2 = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
 
 # ------------------ Tab 1: Data Historis ------------------ #
 with tab1:
-    data_path = "data_harian.csv"
+data_path = "data_harian.csv"
     if os.path.exists(data_path):
         df = pd.read_csv(data_path)
+
+        # Tambahkan kolom jumlah kemunculan LOCATION_CODE
+        df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
+
         indikator_list = df.apply(cek_indikator, axis=1)
         indikator_df = pd.DataFrame(indikator_list.tolist())
+        indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
+
         result = pd.concat([df[['LOCATION_CODE']], indikator_df], axis=1)
-        result['Jumlah Potensi TO'] = indikator_df.sum(axis=1)
-        top50 = result.sort_values(by='Jumlah Potensi TO', ascending=False).head(50)
+        result['Jumlah Potensi TO'] = indikator_df.drop(columns='Jumlah Berulang').sum(axis=1)
+
+        # Hilangkan duplikat LOCATION_CODE
+        result_unique = result.drop_duplicates(subset='LOCATION_CODE')
+        top50 = result_unique.sort_values(by='Jumlah Potensi TO', ascending=False).head(50)
 
         col1, col2, col3 = st.columns(3)
         col1.metric("📄 Total Data", len(df))
         col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
-        col3.metric("🎯 Potensi Target Operasi", sum(result['Jumlah Potensi TO'] > 0))
+        col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
 
         st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
         st.dataframe(top50, use_container_width=True)
 
         st.subheader("📈 Visualisasi Indikator Anomali")
-        indikator_counts = indikator_df.sum().sort_values(ascending=False).reset_index()
+        indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
         indikator_counts.columns = ['Indikator', 'Jumlah']
         fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
         st.plotly_chart(fig, use_container_width=True)
