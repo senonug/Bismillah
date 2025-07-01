@@ -122,7 +122,7 @@ with st.expander("⚙️ Setting Parameter"):
 
 # ------------------ Fungsi Cek ------------------ #
 def cek_indikator(row):
-indikator = {}
+indikator = ()
     indikator['arus_hilang'] = all([row['CURRENT_L1'] == 0, row['CURRENT_L2'] == 0, row['CURRENT_L3'] == 0])
     indikator['over_current'] = any([row['CURRENT_L1'] > param.get('over_i_tm', 5.0), row['CURRENT_L2'] > param.get('over_i_tm', 5.0), row['CURRENT_L3'] > param.get('over_i_tm', 5.0)])
     indikator['over_voltage'] = any([row['VOLTAGE_L1'] > param.get('vmax_tm', 62.0), row['VOLTAGE_L2'] > param.get('vmax_tm', 62.0), row['VOLTAGE_L3'] > param.get('vmax_tm', 62.0)])
