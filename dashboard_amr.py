@@ -122,7 +122,7 @@ with st.expander("⚙️ Setting Parameter"):
 
 # ------------------ Fungsi Cek ------------------ #
 def cek_indikator(row):
-def cek_indikator(row):
+    # fungsi untuk mendeteksi anomali teknis pelanggan AMR
     indikator = {}
     indikator['arus_hilang'] = all([row['CURRENT_L1'] == 0, row['CURRENT_L2'] == 0, row['CURRENT_L3'] == 0])
     indikator['over_current'] = any([
@@ -184,7 +184,6 @@ def cek_indikator(row):
     indikator['current_loop'] = row.get('CURRENT_LOOP', 0) == 1
     indikator['freeze'] = row.get('FREEZE', 0) == 1
     return indikator
-
 # ------------------ Navigasi ------------------ #
 tab1, tab2 = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
 
