@@ -122,13 +122,13 @@ with st.expander("⚙️ Setting Parameter"):
 
 # ------------------ Fungsi Cek ------------------ #
 def cek_indikator(row):
-    indikator = {}
+indikator = {}
     indikator['arus_hilang'] = all([row['CURRENT_L1'] == 0, row['CURRENT_L2'] == 0, row['CURRENT_L3'] == 0])
-    indikator['over_current'] = any([row['CURRENT_L1'] > param['i_over'], row['CURRENT_L2'] > param['i_over'], row['CURRENT_L3'] > param['i_over']])
-    indikator['over_voltage'] = any([row['VOLTAGE_L1'] > param['v_over_tm'], row['VOLTAGE_L2'] > param['v_over_tm'], row['VOLTAGE_L3'] > param['v_over_tm']])
+    indikator['over_current'] = any([row['CURRENT_L1'] > param.get('over_i_tm', 5.0), row['CURRENT_L2'] > param.get('over_i_tm', 5.0), row['CURRENT_L3'] > param.get('over_i_tm', 5.0)])
+    indikator['over_voltage'] = any([row['VOLTAGE_L1'] > param.get('vmax_tm', 62.0), row['VOLTAGE_L2'] > param.get('vmax_tm', 62.0), row['VOLTAGE_L3'] > param.get('vmax_tm', 62.0)])
     v = [row['VOLTAGE_L1'], row['VOLTAGE_L2'], row['VOLTAGE_L3']]
-    indikator['v_drop'] = max(v) - min(v) > param['v_drop_min']
-    indikator['cos_phi_kecil'] = any([row.get(f'POWER_FACTOR_L{i}', 1) < param['cos_phi_max'] for i in range(1, 4)])
+    indikator['v_drop'] = max(v) - min(v) > param.get('low_v_diff_tm', 2.0)
+    indikator['cos_phi_kecil'] = any([row.get(f'POWER_FACTOR_L{i}', 1) < param.get('cos_phi_tm', 0.4) for i in range(1, 4)])
     indikator['active_power_negative'] = any([row.get(f'ACTIVE_POWER_L{i}', 0) < 0 for i in range(1, 4)])
     indikator['arus_kecil_teg_kecil'] = all([
         all([row['CURRENT_L1'] < 1, row['CURRENT_L2'] < 1, row['CURRENT_L3'] < 1]),
@@ -137,9 +137,9 @@ def cek_indikator(row):
     ])
     arus = [row['CURRENT_L1'], row['CURRENT_L2'], row['CURRENT_L3']]
     max_i, min_i = max(arus), min(arus)
-    indikator['unbalance_I'] = (max_i - min_i) / max_i > param['unbalance_tol'] if max_i > 0 else False
+    indikator['unbalance_I'] = (max_i - min_i) / max_i > param.get('unbal_tol_tm', 0.5) if max_i > 0 else False
     indikator['v_lost'] = row.get('VOLTAGE_L1', 0) == 0 or row.get('VOLTAGE_L2', 0) == 0 or row.get('VOLTAGE_L3', 0) == 0
-    indikator['In_more_Imax'] = any([row['CURRENT_L1'] > param['i_max'], row['CURRENT_L2'] > param['i_max'], row['CURRENT_L3'] > param['i_max']])
+    indikator['In_more_Imax'] = any([row['CURRENT_L1'] > param.get('max_i_tm', 1.0), row['CURRENT_L2'] > param.get('max_i_tm', 1.0), row['CURRENT_L3'] > param.get('max_i_tm', 1.0)])
     indikator['active_power_negative_siang'] = row.get('ACTIVE_POWER_SIANG', 0) < 0
     indikator['active_power_negative_malam'] = row.get('ACTIVE_POWER_MALAM', 0) < 0
     indikator['active_p_lost'] = row.get('ACTIVE_POWER_L1', 0) == 0 and row.get('ACTIVE_POWER_L2', 0) == 0 and row.get('ACTIVE_POWER_L3', 0) == 0
