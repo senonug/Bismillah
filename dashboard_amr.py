@@ -279,12 +279,14 @@ with st.expander("📦 AMR", expanded=False):
                 st.success("Data historis berhasil dihapus.")
 
 # ------------------ TABS LAIN ------------------ #
-tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
+tab_amr, tab_pasca, tab_prabayar = st.tabs(["📊 AMR", "💳 Pascabayar", "💡 Prabayar"])
 
 with tab_pasca:
-    st.header("💳 Analisis Pascabayar")
+    st.markdown("### 💳 <span style='font-size:24px'>Analisis Pascabayar</span>", unsafe_allow_html=True)
     st.info("Modul ini akan menampilkan analisis pelanggan pascabayar (dalam pengembangan).")
+    st.dataframe(pd.DataFrame(columns=["IDPEL", "Keterangan", "Skor"]), use_container_width=True)
 
 with tab_prabayar:
-    st.header("💡 Analisis Prabayar")
+    st.markdown("### 💡 <span style='font-size:24px'>Analisis Prabayar</span>", unsafe_allow_html=True)
     st.info("Modul ini akan menampilkan analisis pelanggan prabayar (dalam pengembangan).")
+    st.dataframe(pd.DataFrame(columns=["IDPEL", "Keterangan", "Skor"]), use_container_width=True)
