@@ -9,10 +9,10 @@ if "logged_in" not in st.session_state:
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image("https://upload.wikimedia.org/wikipedia/commons/1/19/Logo_PLN.png", width=80)
+        st.image("ba269076-465f-4c4a-b6e7-84365b2fe3b2.png", width=120)
         st.markdown("<h2 style='text-align:center; margin-top:0;'>T-Energy</h2>", unsafe_allow_html=True)
 
-    st.image("https://cdni.iconscout.com/illustration/premium/thumb/login-password-4482501-3723271.png", width=300)
+    st.image("ba269076-465f-4c4a-b6e7-84365b2fe3b2.png", width=300)
 
     with st.form("login_form"):
         username = st.text_input("Username")
