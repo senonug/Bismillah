@@ -1,4 +1,36 @@
 import streamlit as st
+from PIL import Image
+
+st.set_page_config(page_title="T-Energy Login", layout="centered", page_icon="⚡")
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("https://upload.wikimedia.org/wikipedia/commons/1/19/Logo_PLN.png", width=80)
+        st.markdown("<h2 style='text-align:center; margin-top:0;'>T-Energy</h2>", unsafe_allow_html=True)
+
+    st.image("https://cdni.iconscout.com/illustration/premium/thumb/login-password-4482501-3723271.png", width=300)
+
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("🔒 Sign In with IAM PLN")
+
+        if submitted:
+            if username == "admin" and password == "pln123":
+                st.session_state.logged_in = True
+                st.success("Login berhasil! Selamat datang di T-Energy Dashboard.")
+                st.experimental_rerun()
+            else:
+                st.error("Username atau password salah.")
+
+    st.stop()
+
+
+import streamlit as st
 import pandas as pd
 import os
 import plotly.express as px
