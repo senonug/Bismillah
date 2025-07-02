@@ -27,6 +27,24 @@ if not st.session_state["logged_in"]:
         st.markdown("<hr><div style='text-align:center; font-size:0.85rem;'>© 2025 PT PLN (Persero). All rights reserved.</div>", unsafe_allow_html=True)
     st.stop()
 
+
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+if not st.session_state['logged_in']:
+    with st.sidebar:
+        st.subheader("Login Pegawai")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if username == "admin" and password == "pln123":
+                st.session_state['logged_in'] = True
+                st.success("Login berhasil!")
+                st.rerun()
+            else:
+                st.error("Username/password salah")
+    st.stop()
+
 # ------------------ Tombol Logout ------------------ #
 st.markdown("""
     <style>
