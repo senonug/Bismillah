@@ -1,121 +1,128 @@
-
 import streamlit as st
 import pandas as pd
 import os
 import plotly.express as px
 
-# ------------------ Tampilan Login Profesional ------------------ #
-st.set_page_config(page_title="T-Energy Dashboard", layout="centered", page_icon="⚡")
+# ------------------ Login ------------------ #
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+if not st.session_state['logged_in']:
+    with st.sidebar:
+        st.subheader("Login Pegawai")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if username == "admin" and password == "pln123":
+                st.session_state['logged_in'] = True
+                st.success("Login berhasil!")
+                st.rerun()
+            else:
+                st.error("Username/password salah")
+    st.stop()
+# ------------------ Tombol Logout ------------------ #
 st.markdown("""
     <style>
-    .stApp {
-        background-color: #f9fcff;
-    }
-    h1, h2, h3 {
-        color: #005aa7;
-    }
-    .block-container {
-        padding-top: 2rem;
+    .logout-button {
+        position: absolute;
+        top: 10px;
+        right: 16px;
+        background-color: #f44336;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
     }
     </style>
+    <form action="#" method="post">
+        <button class="logout-button" onclick="window.location.reload();">Logout</button>
+    </form>
 """, unsafe_allow_html=True)
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+# ------------------ Setup ------------------ #
+st.set_page_config(page_title="Dashboard TO AMR", layout="wide")
+with st.expander("📦 AMR", expanded=False):
+    st.title("📊 Dashboard Target Operasi AMR - P2TL")
+    st.markdown("---")
 
-if not st.session_state.logged_in:
-    with st.container():
-        st.markdown("<h1 style='text-align:center; color:#005aa7;'>T-Energy</h1>", unsafe_allow_html=True)
-        st.image("https://upload.wikimedia.org/wikipedia/commons/1/19/Logo_PLN.png", width=100)
+    # ------------------ Ambil semua parameter threshold dari session state ------------------ #
+    param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float, float))}
 
-        with st.form("login_form"):
-            st.subheader("Masuk ke Dashboard")
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("🔒 Sign In with IAM PLN")
-
-            if submitted:
-                if username == "admin" and password == "pln123":
-                    st.session_state['logged_in'] = True
-                    st.success("Login berhasil! Selamat datang di T-Energy.")
-                    st.rerun()
-                else:
-                    st.error("Username atau password salah.")
-
+    # ------------------ Parameter Threshold Section ------------------ #
+    with st.expander("⚙️ Setting Parameter"):
         st.markdown("""
-            <hr>
-            <div style='text-align:center; font-size:0.9rem; color:#666;'>
-            © 2025 PT PLN (Persero). All rights reserved.
-            </div>
-        """, unsafe_allow_html=True)
-    st.stop()
+        Operasi Logika yang digunakan di sini adalah **OR**. Dengan demikian, indikator yang sesuai dengan salah satu spesifikasi aturan tersebut akan di-highlight berwarna hijau cerah dan berkontribusi pada perhitungan potensi TO.
+        """)
 
-# ------------------ Navigasi Tab ------------------ #
-    tab_amr, tab_prabayar, tab_pascabayar = st.tabs(["🔌 AMR", "💡 Prabayar", "📥 Pascabayar"])
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.markdown("#### Tegangan Drop")
+            st.number_input("Set Batas Atas Tegangan Menengah (tm)", key="v_tm_max", value=56.0)
+            st.number_input("Set Batas Atas Tegangan Rendah (tr)", key="v_tr_max", value=180.0)
+            st.number_input("Set Batas Bawah Arus Besar tm", key="i_tm_min", value=0.5)
+            st.number_input("Set Batas Bawah Arus Besar tr", key="i_tr_min", value=0.5)
 
-with tab_amr:
-    st.subheader("📦 Analisis Data AMR")
+            st.markdown("#### Arus Netral vs Arus Maks")
+            st.number_input("Set Batas Bawah Arus Netral tm", key="neutral_tm", value=1.0)
+            st.number_input("Set Batas Bawah Arus Netral tr", key="neutral_tr", value=10.0)
 
-    uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-        df = df.dropna(subset=['LOCATION_CODE'])
+            st.markdown("#### Reverse Power")
+            st.number_input("Set Non Aktif Power TM", key="reverse_p_tm", value=0.0)
+            st.number_input("Set Non Aktif Power TR", key="reverse_p_tr", value=0.0)
+            st.number_input("Set Batas Bawah Arus Reverse Power TM", key="reverse_i_tm", value=0.5)
+            st.number_input("Set Batas Bawah Arus Reverse Power TR", key="reverse_i_tr", value=0.7)
 
-        # Skoring risiko berdasarkan total arus & tegangan abnormal
-        df['RISK_SCORE'] = (
-            (df['CURRENT_L1'] > 80).astype(int) +
-            (df['CURRENT_L2'] > 80).astype(int) +
-            (df['CURRENT_L3'] > 80).astype(int) +
-            (df['VOLTAGE_L1'] < 180).astype(int) +
-            (df['VOLTAGE_L2'] < 180).astype(int) +
-            (df['VOLTAGE_L3'] < 180).astype(int)
-        )
+        with col2:
+            st.markdown("#### Tegangan Hilang")
+            st.number_input("Nilai Tegangan Menengah Hilang (tm)", key="v_tm_zero", value=0.0)
+            st.number_input("Nilai Tegangan Rendah Hilang (tr)", key="v_tr_zero", value=0.0)
+            st.number_input("Set Batas Bawah Arus Besar tm", key="loss_tm_i", value=-1.0)
+            st.number_input("Set Batas Bawah Arus Besar tr", key="loss_tr_i", value=-1.0)
 
-        df['LEVEL'] = pd.cut(df['RISK_SCORE'], bins=[-1,1,3,6], labels=['Rendah','Sedang','Tinggi'])
+            st.markdown("#### Arus Unbalance")
+            st.number_input("Toleransi Unbalance TM", key="unbal_tol_tm", value=0.5)
+            st.number_input("Toleransi Unbalance TR", key="unbal_tol_tr", value=0.5)
+            st.number_input("Set Batas Bawah Arus Unbalance TM", key="unbal_i_tm", value=0.5)
+            st.number_input("Set Batas Bawah Arus Unbalance TR", key="unbal_i_tr", value=1.0)
 
-        st.success(f"Data terdeteksi: {len(df)} baris")
-        st.dataframe(df[['LOCATION_CODE', 'RISK_SCORE', 'LEVEL']].sort_values(by='RISK_SCORE', ascending=False))
+            st.markdown("#### Active Power Lost")
+            st.number_input("Set Batas Bawah Arus P Lost", key="plost_i_min", value=0.5)
 
-        # Tombol Export
-        import io
-        from datetime import datetime
+        with col3:
+            st.markdown("#### Cos Phi Kecil")
+            st.number_input("Cos Phi Max TM", key="cos_phi_tm", value=0.4)
+            st.number_input("Cos Phi Max TR", key="cos_phi_tr", value=0.4)
+            st.number_input("Set Batas Arus Besar tm", key="cos_i_tm", value=0.8)
+            st.number_input("Set Batas Arus Besar tr", key="cos_i_tr", value=0.8)
 
-        to_export = df[['LOCATION_CODE', 'RISK_SCORE', 'LEVEL']]
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            to_export.to_excel(writer, index=False, sheet_name='Skoring')
-        st.download_button("⬇️ Export Skoring ke Excel", data=buffer.getvalue(), file_name=f"skoring_amr_{datetime.now().date()}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    else:
-        st.info("Silakan unggah file AMR harian (.xlsx) untuk mulai analisis skoring.")
+            st.markdown("#### Arus < Tegangan Kecil")
+            st.number_input("Set Selisih Tegangan TM", key="low_v_diff_tm", value=2.0)
+            st.number_input("Set Selisih Tegangan TR", key="low_v_diff_tr", value=8.0)
 
-with tab_prabayar:
-    st.subheader("💡 Analisis Data Prabayar")
-    st.warning("Fitur prabayar sedang dalam pengembangan. Silakan siapkan data token, arus, dan tegangan.")
+        with col4:
+            st.markdown("#### Arus Hilang")
+            st.number_input("Set Batas Arus Hilang pada TM", key="loss_i_tm", value=0.02)
+            st.number_input("Set Batas Arus Hilang pada TR", key="loss_i_tr", value=0.02)
+            st.number_input("Set Batas Bawah Arus Maksimum tm", key="max_i_tm", value=1.0)
+            st.number_input("Set Batas Bawah Arus Maksimum tr", key="max_i_tr", value=1.0)
 
-with tab_pascabayar:
-    st.subheader("📥 Integrasi Data Lapangan (DIL / Target Operasi)")
-    st.info("Unggah file DIL (.xlsx) untuk mencocokkan ID pelanggan AMR dengan hasil temuan lapangan.")
+            st.markdown("#### Over Current (Tak Langsung)")
+            st.number_input("Set Batas bawah Arus Maks pada TM", key="over_i_tm", value=5.0)
+            st.number_input("Set Batas bawah Arus Maks pada TR", key="over_i_tr", value=5.0)
 
-    uploaded_dil = st.file_uploader("📎 Upload File DIL (XLSX)", type=["xlsx"], key="dil")
-    if uploaded_dil:
-        df_dil = pd.read_excel(uploaded_dil)
-        st.success(f"Data DIL berhasil dimuat: {len(df_dil)} baris")
-        st.dataframe(df_dil)
+            st.markdown("#### Over Voltage")
+            st.number_input("Tegangan Maksimum TM", key="vmax_tm", value=62.0)
+            st.number_input("Tegangan Maksimum TR", key="vmax_tr", value=241.0)
 
-        if 'df' in locals():
-            matched = df.merge(df_dil, left_on='LOCATION_CODE', right_on='IDPEL', how='inner')
-            st.markdown("### 🔍 Hasil Pencocokan AMR vs DIL")
-            st.dataframe(matched[['LOCATION_CODE', 'RISK_SCORE', 'LEVEL'] + [col for col in df_dil.columns if col != 'IDPEL']])
-        else:
-            st.warning("Harap unggah juga data AMR terlebih dahulu pada tab AMR.")
+        st.markdown("---")
+        st.markdown("### Kriteria TO")
+        st.number_input("Jumlah Indikator ≥", key="min_indicator", value=1)
+        st.number_input("Jumlah Bobot ≥", key="min_weight", value=2)
+        st.number_input("Banyak Data yang Ditampilkan", key="top_limit", value=50)
 
-st.markdown("<hr><div style='text-align:center; font-size:0.8rem;'>© 2025 PT PLN (Persero)</div>", unsafe_allow_html=True)
-st.title("📊 Dashboard T-Energy (AMR / Prabayar / Pascabayar)")
-st.markdown("Silakan pilih tab dan unggah data untuk mulai analisis.")
-
-
-# ------------------ FUNGSI CEK INDIKATOR ------------------ #
-def cek_indikator(row):
+    # ------------------ Fungsi Cek ------------------ #
+    def cek_indikator(row):
         # fungsi untuk mendeteksi anomali teknis pelanggan AMR
         indikator = {}
         indikator['arus_hilang'] = all([row['CURRENT_L1'] == 0, row['CURRENT_L2'] == 0, row['CURRENT_L3'] == 0])
