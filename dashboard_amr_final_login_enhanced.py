@@ -48,6 +48,8 @@ with st.form("login_form"):
         submitted = st.form_submit_button("🔒 Sign In with IAM PLN")
 
         if submitted:
+
+st.markdown("</div>", unsafe_allow_html=True)
             if username == "admin" and password == "pln123":
                 st.session_state.logged_in = True
                 st.success("Login berhasil! Selamat datang di T-Energy Dashboard.")
@@ -55,9 +57,7 @@ with st.form("login_form"):
             else:
                 st.error("Username atau password salah.")
 
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)
 
     st.stop()
 
@@ -85,9 +85,7 @@ if not st.session_state['logged_in']:
                 st.rerun()
             else:
                 st.error("Username/password salah")
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)
 
     st.stop()
 
