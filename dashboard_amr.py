@@ -4,21 +4,28 @@ import os
 import plotly.express as px
 
 # ------------------ Login ------------------ #
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
+st.set_page_config(page_title="T-Energy", layout="centered", page_icon="⚡")
 
-if not st.session_state['logged_in']:
-    with st.sidebar:
-        st.subheader("Login Pegawai")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            if username == "admin" and password == "pln123":
-                st.session_state['logged_in'] = True
-                st.success("Login berhasil!")
-                st.rerun()
-            else:
-                st.error("Username/password salah")
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+
+if not st.session_state["logged_in"]:
+    with st.container():
+        st.markdown("<h1 style='text-align:center; color:#005aa7;'>T-Energy</h1>", unsafe_allow_html=True)
+        st.image("https://upload.wikimedia.org/wikipedia/commons/1/19/Logo_PLN.png", width=100)
+        with st.form("login_form"):
+            st.subheader("Masuk ke Dashboard")
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("🔒 Sign In with IAM PLN")
+            if submitted:
+                if username == "admin" and password == "pln123":
+                    st.session_state["logged_in"] = True
+                    st.success("Login berhasil! Selamat datang di T-Energy.")
+                    st.rerun()
+                else:
+                    st.error("Username atau password salah")
+        st.markdown("<hr><div style='text-align:center; font-size:0.85rem;'>© 2025 PT PLN (Persero). All rights reserved.</div>", unsafe_allow_html=True)
     st.stop()
 # ------------------ Tombol Logout ------------------ #
 st.markdown("""
