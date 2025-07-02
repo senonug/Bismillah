@@ -277,3 +277,14 @@ with st.expander("📦 AMR", expanded=False):
             if os.path.exists(data_path):
                 os.remove(data_path)
                 st.success("Data historis berhasil dihapus.")
+
+# ------------------ TABS LAIN ------------------ #
+tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
+
+with tab_pasca:
+    st.header("💳 Analisis Pascabayar")
+    st.info("Modul ini akan menampilkan analisis pelanggan pascabayar (dalam pengembangan).")
+
+with tab_prabayar:
+    st.header("💡 Analisis Prabayar")
+    st.info("Modul ini akan menampilkan analisis pelanggan prabayar (dalam pengembangan).")
