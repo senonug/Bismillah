@@ -3,49 +3,6 @@ import pandas as pd
 import os
 import plotly.express as px
 
-
-# ------------------ CUSTOM DARK THEME & BRANDING ------------------ #
-st.markdown("""
-    <style>
-    body {
-        background-color: #0f172a;
-        color: white;
-    }
-    .stApp {
-        background-color: #1e293b;
-        color: white;
-    }
-    h1, h2, h3, h4 {
-        color: #ffffff;
-    }
-    .block-container {
-        padding-top: 2rem;
-    }
-    .logout-button {
-        background-color: #ef4444;
-        color: white;
-    }
-    .stButton>button {
-        background-color: #3b82f6;
-        color: white;
-    }
-    .stTabs [data-baseweb="tab-list"] button {
-        color: white;
-    }
-    .stTabs [aria-selected="true"] {
-        border-bottom: 3px solid #3b82f6;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-
-st.markdown(
-    "<div style='text-align:center; margin-bottom:1rem;'>"
-    "<img src='https://upload.wikimedia.org/wikipedia/commons/1/19/Logo_PLN.png' width='80'>"
-    "</div>",
-    unsafe_allow_html=True
-)
-
 # ------------------ Login ------------------ #
 st.set_page_config(page_title="T-Energy", layout="centered", page_icon="⚡")
 
@@ -322,14 +279,12 @@ with st.expander("📦 AMR", expanded=False):
                 st.success("Data historis berhasil dihapus.")
 
 # ------------------ TABS LAIN ------------------ #
-tab_amr, tab_pasca, tab_prabayar = st.tabs(["📊 AMR", "💳 Pascabayar", "💡 Prabayar"])
+tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
 
 with tab_pasca:
-    st.markdown("### 💳 <span style='font-size:24px'>Analisis Pascabayar</span>", unsafe_allow_html=True)
+    st.header("💳 Analisis Pascabayar")
     st.info("Modul ini akan menampilkan analisis pelanggan pascabayar (dalam pengembangan).")
-    st.dataframe(pd.DataFrame(columns=["IDPEL", "Keterangan", "Skor"]), use_container_width=True)
 
 with tab_prabayar:
-    st.markdown("### 💡 <span style='font-size:24px'>Analisis Prabayar</span>", unsafe_allow_html=True)
+    st.header("💡 Analisis Prabayar")
     st.info("Modul ini akan menampilkan analisis pelanggan prabayar (dalam pengembangan).")
-    st.dataframe(pd.DataFrame(columns=["IDPEL", "Keterangan", "Skor"]), use_container_width=True)
