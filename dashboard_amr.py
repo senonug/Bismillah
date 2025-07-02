@@ -3,14 +3,17 @@ from PIL import Image
 
 st.set_page_config(page_title="T-Energy Login", layout="centered", page_icon="⚡")
 
+
+
+
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.image("ba269076-465f-4c4a-b6e7-84365b2fe3b2.png", width=120)
-        st.markdown("<h2 style='text-align:center; margin-top:0;'>T-Energy</h2>", unsafe_allow_html=True)
+    st.markdown("""<div style="text-align:center;">
+    <img src='ba269076-465f-4c4a-b6e7-84365b2fe3b2.png' width='200'><br>
+    <h2 style='margin-top:10px;'>T-Energy</h2>
+</div>""", unsafe_allow_html=True)
 
     st.image("ba269076-465f-4c4a-b6e7-84365b2fe3b2.png", width=300)
 
