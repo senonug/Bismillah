@@ -51,7 +51,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ------------------ Navigasi Tab ------------------ #
-tab_amr, tab_prabayar, tab_pascabayar = st.tabs(["🔌 AMR", "💡 Prabayar", "📥 Pascabayar"])
+    tab_amr, tab_prabayar, tab_pascabayar = st.tabs(["🔌 AMR", "💡 Prabayar", "📥 Pascabayar"])
 
 with tab_amr:
     st.subheader("📦 Analisis Data AMR")
