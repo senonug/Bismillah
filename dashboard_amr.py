@@ -282,9 +282,32 @@ with st.expander("📦 AMR", expanded=False):
 tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
 
 with tab_pasca:
-    st.header("💳 Analisis Pascabayar")
-    st.info("Modul ini akan menampilkan analisis pelanggan pascabayar (dalam pengembangan).")
+    st.title("📊 Dashboard Target Operasi Pascabayar")
+    st.markdown("---")
+    uploaded_file = st.file_uploader("📥 Upload File Excel Pascabayar", type=["xlsx"], key="pasca")
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file)
+        df["skor_indikator"] = df.filter(like="POWER").gt(0).sum(axis=1)
+        df["skor_risiko"] = df["skor_indikator"].apply(lambda x: "Tinggi" if x > 5 else "Sedang" if x > 2 else "Rendah")
+        st.dataframe(df.head(50), use_container_width=True)
+        fig = px.histogram(df, x="skor_risiko", color="skor_risiko", title="Distribusi Risiko Pascabayar")
+        st.plotly_chart(fig, use_container_width=True)
+        st.download_button("📤 Download Excel", df.to_csv(index=False).encode(), file_name="hasil_pascabayar.csv", mime="text/csv")
+    else:
+        st.info("Silakan upload file Excel pelanggan pascabayar.")
 
 with tab_prabayar:
-    st.header("💡 Analisis Prabayar")
-    st.info("Modul ini akan menampilkan analisis pelanggan prabayar (dalam pengembangan).")
+   with tab_prabayar:
+    st.title("📊 Dashboard Target Operasi Prabayar")
+    st.markdown("---")
+    uploaded_file = st.file_uploader("📥 Upload File Excel Prabayar", type=["xlsx"], key="prabayar")
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file)
+        df["skor_indikator"] = df.filter(like="POWER").gt(0).sum(axis=1)
+        df["skor_risiko"] = df["skor_indikator"].apply(lambda x: "Tinggi" if x > 5 else "Sedang" if x > 2 else "Rendah")
+        st.dataframe(df.head(50), use_container_width=True)
+        fig = px.histogram(df, x="skor_risiko", color="skor_risiko", title="Distribusi Risiko Prabayar")
+        st.plotly_chart(fig, use_container_width=True)
+        st.download_button("📤 Download Excel", df.to_csv(index=False).encode(), file_name="hasil_prabayar.csv", mime="text/csv")
+    else:
+        st.info("Silakan upload file Excel pelanggan prabayar.")
