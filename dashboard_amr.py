@@ -314,9 +314,26 @@ with tab_pasca:
     else:
         df = pd.DataFrame()
 
-    if not df.empty:
-        st.subheader("🎯 Rekomendasi Target Operasi")
+if not df.empty:
+        df = df.drop(columns=["FAKM"], errors="ignore")  # Hapus kolom FAKM jika ada
 
+        st.subheader("📊 Ringkasan Pemakaian kWh (PEMKWH)")
+        pemkwh_df = df[["THBLREK", "IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK", "PEMKWH"]].copy()
+        pemkwh_pivot = pemkwh_df.pivot(index=["IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK"], columns="THBLREK", values="PEMKWH")
+        pemkwh_pivot.columns.name = ""  # Hilangkan nama kolom "THBLREK"
+        pemkwh_pivot = pemkwh_pivot.reset_index()
+        st.dataframe(pemkwh_pivot, use_container_width=True)
+        st.download_button("📥 Download Tabel PEMKWH", pemkwh_pivot.to_csv(index=False).encode(), file_name="ringkasan_pemkwh.csv", mime="text/csv")
+
+        st.subheader("⏱️ Ringkasan Waktu Nyala (JAMNYALA)")
+        jamnyala_df = df[["THBLREK", "IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK", "JAMNYALA"]].copy()
+        jamnyala_pivot = jamnyala_df.pivot(index=["IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK"], columns="THBLREK", values="JAMNYALA")
+        jamnyala_pivot.columns.name = ""
+        jamnyala_pivot = jamnyala_pivot.reset_index()
+        st.dataframe(jamnyala_pivot, use_container_width=True)
+        st.download_button("📥 Download Tabel JAMNYALA", jamnyala_pivot.to_csv(index=False).encode(), file_name="ringkasan_jamnyala.csv", mime="text/csv")
+
+        st.subheader("🎯 Rekomendasi Target Operasi")
         # Hitung parameter risiko per IDPEL
         risk_df = df.groupby("IDPEL").agg(
             nama=("NAMA", "first"),
@@ -327,9 +344,9 @@ with tab_pasca:
             max_kwh=("PEMKWH", "max"),
             zero_count=("PEMKWH", lambda x: (x == 0).sum()),
             count_months=("PEMKWH", "count"),
-            mean_jamnyala=("JAMNYALA", "mean"),
-            mean_fakm=("FAKM", "mean")
+            mean_jamnyala=("JAMNYALA", "mean")
         ).reset_index()
+
 
         # Skor risiko berdasarkan parameter pencurian
         risk_df["skor"] = 0
