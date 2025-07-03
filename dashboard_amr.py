@@ -65,17 +65,6 @@ st.markdown("""
     </form>
 """, unsafe_allow_html=True)
 
-# ------------------ Caching ------------------ #
-@st.cache_data
-def load_olap_histori(path):
-    if os.path.exists(path):
-        try:
-            return pd.read_csv(path)
-        except Exception as e:
-            st.error(f"Gagal membaca histori: {e}")
-            return pd.DataFrame()
-    else:
-        return pd.DataFrame()
 
 # ------------------ Setup ------------------ #
 st.set_page_config(page_title="Dashboard TO AMR", layout="wide")
@@ -306,16 +295,24 @@ with tab_pasca:
                 st.error("Kolom yang dibutuhkan tidak lengkap dalam file.")
             else:
                 df_new = df_new[["THBLREK", "IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK", "PEMKWH", "JAMNYALA", "FAKM"]]
-                df_hist = load_olap_histori(olap_path)
+                df_new = df_new.dropna(subset=["IDPEL"])
+
+                # Coba baca histori tanpa cache untuk akurasi
+                df_hist = pd.read_csv(olap_path) if os.path.exists(olap_path) else pd.DataFrame()
                 df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"])
-                st.write("Data Gabungan:", df_all.head())  # Debug visualisasi
+                st.write("Data Gabungan:", df_all.head())
+                st.write("Total data setelah digabung:", df_all.shape)
                 df_all.to_csv(olap_path, index=False)
                 st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
         except Exception as e:
             st.error(f"Gagal memproses file: {e}")
 
-    df = load_olap_histori(olap_path)
-    st.write("Data OLAP Histori Dibaca:", df.head())  # Debug pembacaan
+    # Baca histori OLAP terbaru
+    if os.path.exists(olap_path):
+        df = pd.read_csv(olap_path)
+        st.write("Data OLAP Histori Dibaca:", df.head())
+    else:
+        df = pd.DataFrame()
 
     if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
