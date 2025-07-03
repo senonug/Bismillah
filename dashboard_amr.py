@@ -65,6 +65,11 @@ st.markdown("""
     </form>
 """, unsafe_allow_html=True)
 
+# ------------------ Caching ------------------ #
+@st.cache_data
+def load_olap_histori(path):
+    return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame()
+
 # ------------------ Setup ------------------ #
 st.set_page_config(page_title="Dashboard TO AMR", layout="wide")
 with st.expander("📦 AMR", expanded=False):
@@ -336,8 +341,8 @@ with tab_pasca:
         st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
+
 with tab_prabayar:
-   with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
     uploaded_file = st.file_uploader("📥 Upload File Excel Prabayar", type=["xlsx"], key="prabayar")
