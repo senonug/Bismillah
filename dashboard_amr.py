@@ -291,29 +291,25 @@ with tab_pasca:
         df_new = pd.read_excel(uploaded_file)
         df_new = df_new[["THBLREK", "IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK", "PEMKWH", "JAMNYALA", "FAKM"]]
 
-        if os.path.exists(olap_path):
-            df_hist = pd.read_csv(olap_path)
-            df_all = pd.concat([df_hist, df_new], ignore_index=True).drop_duplicates()
-        else:
-            df_all = df_new
-
+        df_hist = load_olap_histori(olap_path)
+        df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"])
         df_all.to_csv(olap_path, index=False)
         st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
 
-    # Visualisasi jika histori tersedia
-    if os.path.exists(olap_path):
-        df = pd.read_csv(olap_path)
+    df = load_olap_histori(olap_path)
+
+    if not df.empty:
         st.subheader("📈 Visualisasi Pemakaian Pelanggan")
         id_selected = st.selectbox("Pilih IDPEL", sorted(df["IDPEL"].unique()))
         df_id = df[df["IDPEL"] == id_selected].sort_values("THBLREK")
-        fig = px.line(df_id, x="THBLREK", y="PEMKWH", title=f"Trend Pemakaian kWh - {id_selected}")
+        fig = px.line(df_id.tail(12), x="THBLREK", y="PEMKWH", title=f"Trend Pemakaian kWh - {id_selected}")
         st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("🎯 Rekomendasi Target Operasi")
         df_summary = df.groupby("IDPEL")["PEMKWH"].std().reset_index(name="STD_PEMKWH")
         threshold_std = st.number_input("Set Batas STD kWh (semakin tinggi = fluktuatif)", value=150.0)
         df_to = df_summary[df_summary["STD_PEMKWH"] > threshold_std]
-        st.dataframe(df_to, use_container_width=True)
+        st.dataframe(df_to.head(1000), use_container_width=True)
         st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
