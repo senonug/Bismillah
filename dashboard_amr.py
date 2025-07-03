@@ -68,7 +68,14 @@ st.markdown("""
 # ------------------ Caching ------------------ #
 @st.cache_data
 def load_olap_histori(path):
-    return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame()
+    if os.path.exists(path):
+        try:
+            return pd.read_csv(path)
+        except Exception as e:
+            st.error(f"Gagal membaca histori: {e}")
+            return pd.DataFrame()
+    else:
+        return pd.DataFrame()
 
 # ------------------ Setup ------------------ #
 st.set_page_config(page_title="Dashboard TO AMR", layout="wide")
@@ -293,15 +300,22 @@ with tab_pasca:
     uploaded_file = st.file_uploader("📥 Upload File OLAP Pascabayar Bulanan", type=["xlsx"], key="pasca")
 
     if uploaded_file:
-        df_new = pd.read_excel(uploaded_file)
-        df_new = df_new[["THBLREK", "IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK", "PEMKWH", "JAMNYALA", "FAKM"]]
-
-        df_hist = load_olap_histori(olap_path)
-        df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"])
-        df_all.to_csv(olap_path, index=False)
-        st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
+        try:
+            df_new = pd.read_excel(uploaded_file)
+            if not set(["THBLREK", "IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK", "PEMKWH", "JAMNYALA", "FAKM"]).issubset(df_new.columns):
+                st.error("Kolom yang dibutuhkan tidak lengkap dalam file.")
+            else:
+                df_new = df_new[["THBLREK", "IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK", "PEMKWH", "JAMNYALA", "FAKM"]]
+                df_hist = load_olap_histori(olap_path)
+                df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"])
+                st.write("Data Gabungan:", df_all.head())  # Debug visualisasi
+                df_all.to_csv(olap_path, index=False)
+                st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
+        except Exception as e:
+            st.error(f"Gagal memproses file: {e}")
 
     df = load_olap_histori(olap_path)
+    st.write("Data OLAP Histori Dibaca:", df.head())  # Debug pembacaan
 
     if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
@@ -333,11 +347,8 @@ with tab_pasca:
         df_to = risk_df[risk_df["skor"] >= skor_threshold].sort_values("skor", ascending=False)
 
         st.dataframe(df_to.head(1000), use_container_width=True)
-
-        # Tambahkan grafik risiko
         fig_risk = px.histogram(df_to, x="skor", nbins=6, title="Distribusi Skor Risiko Pelanggan Pascabayar")
         st.plotly_chart(fig_risk, use_container_width=True)
-
         st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
