@@ -299,21 +299,43 @@ with tab_pasca:
     df = load_olap_histori(olap_path)
 
     if not df.empty:
-        st.subheader("📈 Visualisasi Pemakaian Pelanggan")
-        id_selected = st.selectbox("Pilih IDPEL", sorted(df["IDPEL"].unique()))
-        df_id = df[df["IDPEL"] == id_selected].sort_values("THBLREK")
-        fig = px.line(df_id.tail(12), x="THBLREK", y="PEMKWH", title=f"Trend Pemakaian kWh - {id_selected}")
-        st.plotly_chart(fig, use_container_width=True)
-
         st.subheader("🎯 Rekomendasi Target Operasi")
-        df_summary = df.groupby("IDPEL")["PEMKWH"].std().reset_index(name="STD_PEMKWH")
-        threshold_std = st.number_input("Set Batas STD kWh (semakin tinggi = fluktuatif)", value=150.0)
-        df_to = df_summary[df_summary["STD_PEMKWH"] > threshold_std]
+
+        # Hitung parameter risiko per IDPEL
+        risk_df = df.groupby("IDPEL").agg(
+            nama=("NAMA", "first"),
+            alamat=("ALAMAT", "first"),
+            std_kwh=("PEMKWH", "std"),
+            mean_kwh=("PEMKWH", "mean"),
+            min_kwh=("PEMKWH", "min"),
+            max_kwh=("PEMKWH", "max"),
+            zero_count=("PEMKWH", lambda x: (x == 0).sum()),
+            count_months=("PEMKWH", "count"),
+            mean_jamnyala=("JAMNYALA", "mean"),
+            mean_fakm=("FAKM", "mean")
+        ).reset_index()
+
+        # Skor risiko berdasarkan parameter pencurian
+        risk_df["skor"] = 0
+        risk_df.loc[risk_df["std_kwh"] > 200, "skor"] += 1
+        risk_df.loc[risk_df["zero_count"] >= 2, "skor"] += 1
+        risk_df.loc[risk_df["min_kwh"] == 0, "skor"] += 1
+        risk_df.loc[risk_df["mean_kwh"] < 50, "skor"] += 1
+        risk_df.loc[risk_df["mean_jamnyala"] < 100, "skor"] += 1
+        risk_df.loc[risk_df["mean_fakm"] < 0.7, "skor"] += 1
+
+        skor_threshold = st.slider("Minimal Skor Risiko untuk TO", 1, 6, 3)
+        df_to = risk_df[risk_df["skor"] >= skor_threshold].sort_values("skor", ascending=False)
+
         st.dataframe(df_to.head(1000), use_container_width=True)
+
+        # Tambahkan grafik risiko
+        fig_risk = px.histogram(df_to, x="skor", nbins=6, title="Distribusi Skor Risiko Pelanggan Pascabayar")
+        st.plotly_chart(fig_risk, use_container_width=True)
+
         st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
-
 with tab_prabayar:
    with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
