@@ -310,6 +310,15 @@ with tab_pasca:
 
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
+
+        df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH").fillna(0).astype(int)
+        df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA").fillna(0).astype(int)
+
+        with st.expander("📁 Tabel PEMKWH Bulanan"):
+            st.dataframe(df_pivot_kwh, use_container_width=True)
+
+        with st.expander("📁 Tabel JAMNYALA Bulanan"):
+            st.dataframe(df_pivot_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
 
@@ -321,7 +330,7 @@ with tab_pasca:
         if selected_thblrek != "Semua":
             df = df[df["THBLREK"] == selected_thblrek]
 
-        idpel_selected = st.selectbox("Pilih IDPEL untuk Analisis Detail", ["Semua"] + df["IDPEL"].unique().tolist())
+        idpel_selected = st.selectbox("Pilih IDPEL untuk Analisis Detail (Opsional)", ["Semua"] + df["IDPEL"].unique().tolist())
 
         risk_df = df.groupby("IDPEL").agg(
             nama=("NAMA", "first"),
@@ -356,19 +365,10 @@ with tab_pasca:
         if idpel_selected != "Semua":
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {idpel_selected}")
             df_idpel = df[df["IDPEL"] == idpel_selected].sort_values("THBLREK")
-            if not df_idpel.empty:
-                fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
-                st.plotly_chart(fig_line, use_container_width=True)
-
-                fig_jam = px.line(df_idpel, x="THBLREK", y="JAMNYALA", title="Grafik Jam Nyala Bulanan")
-                st.plotly_chart(fig_jam, use_container_width=True)
-            else:
-                st.warning("Data IDPEL tidak ditemukan untuk visualisasi.")
-        else:
-            st.info("Silakan pilih IDPEL untuk melihat grafik konsumsi dan jam nyala.")
+            fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
+            st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
-
 
 with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
