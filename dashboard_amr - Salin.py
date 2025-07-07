@@ -308,16 +308,27 @@ with tab_pasca:
             os.remove(olap_path)
             st.success("Histori OLAP berhasil dihapus.")
 
-    if os.path.exists(olap_path):
+   if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
+        st.write("Data OLAP Histori Dibaca:")
 
-        with st.expander("📂 Tabel PEMKWH Bulanan"):
-            df_kwh_pivot = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
-            st.dataframe(df_kwh_pivot, use_container_width=True)
+        df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH")
+        df_pivot_jam = df.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA")
+         with st.expander("📁 Tabel PEMKWH Bulanan"):
+            st.dataframe(df_pivot_kwh, use_container_width=True)
+            top_kwh = df_pivot_kwh.sum(axis=1).sort_values(ascending=False).head(5).index.tolist()
+            fig_kwh = px.line(df_pivot_kwh.loc[top_kwh].T, 
+                              labels={"value": "PEMKWH", "index": "Bulan", "variable": "IDPEL"},
+                              title="Trend Konsumsi KWH per Bulan")
+            st.plotly_chart(fig_kwh, use_container_width=True)
 
-        with st.expander("📂 Tabel JAMNYALA Bulanan"):
-            df_jam_pivot = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
-            st.dataframe(df_jam_pivot, use_container_width=True)
+        with st.expander("📁 Tabel JAMNYALA Bulanan"):
+            st.dataframe(df_pivot_jam, use_container_width=True)
+            top_jam = df_pivot_jam.mean(axis=1).sort_values(ascending=False).head(5).index.tolist()
+            fig_jam = px.line(df_pivot_jam.loc[top_jam].T, 
+                              labels={"value": "Jam Nyala", "index": "Bulan", "variable": "IDPEL"},
+                              title="Trend Jam Nyala per Bulan")
+            st.plotly_chart(fig_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
 
