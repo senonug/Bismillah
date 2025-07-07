@@ -286,7 +286,7 @@ with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
     olap_path = "olap_pascabayar.csv"
-    uploaded_file = st.file_uploader("📥 Upload File OLAP Pascabayar Bulanan", type=["xlsx"], key="pasca")
+    uploaded_file = st.file_uploader("📅 Upload File OLAP Pascabayar Bulanan", type=["xlsx"], key="pasca")
 
     if uploaded_file:
         try:
@@ -311,13 +311,12 @@ with tab_pasca:
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
 
-        df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH").fillna(0).astype(int)
-        df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA").fillna(0).astype(int)
-
         with st.expander("📁 Tabel PEMKWH Bulanan"):
+            df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
             st.dataframe(df_pivot_kwh, use_container_width=True)
 
         with st.expander("📁 Tabel JAMNYALA Bulanan"):
+            df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
             st.dataframe(df_pivot_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
@@ -344,23 +343,38 @@ with tab_pasca:
             mean_jamnyala=("JAMNYALA", "mean")
         ).reset_index()
 
-        risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= 3
-        risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < 50
+        with st.expander("⚙️ Parameter Indikator Risiko"):
+            col1, col2 = st.columns(2)
+            with col1:
+                min_jamnyala = st.number_input("Jam Nyala Abnormal (<)", min_value=0, value=50)
+                min_kwh_mean = st.number_input("Rata-rata KWH Rendah (<)", min_value=0, value=50)
+                min_jamnyala_kwh = st.number_input("Jam Nyala < untuk anomali KWH tinggi", min_value=0, value=100)
+                min_kwh_high = st.number_input("KWH > untuk anomali Jam Nyala kecil", min_value=0, value=300)
+            with col2:
+                min_std_kwh = st.number_input("Variasi KWH Tinggi (std >)", min_value=0, value=200)
+                zero_limit = st.number_input("Bulan dengan KWH 0 (>=)", min_value=1, value=3)
+
+        risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= zero_limit
+        risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < min_jamnyala
         risk_df["min_kwh_zero"] = risk_df["min_kwh"] == 0
-        risk_df["rendah_rata"] = risk_df["mean_kwh"] < 50
+        risk_df["rendah_rata"] = risk_df["mean_kwh"] < min_kwh_mean
+        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > min_std_kwh
+        risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < min_jamnyala_kwh) & (risk_df["mean_kwh"] > min_kwh_high)
 
-        risk_df["skor"] = 0
-        for col in ["pemakaian_zero_3x", "jamnyala_abnormal", "min_kwh_zero", "rendah_rata"]:
-            risk_df.loc[risk_df[col], "skor"] += 1
+        indikator_cols = [
+            "pemakaian_zero_3x", "jamnyala_abnormal", "min_kwh_zero",
+            "rendah_rata", "variasi_tinggi", "jamnyala_kecil_tapi_kwh_tinggi"
+        ]
+        risk_df["skor"] = risk_df[indikator_cols].sum(axis=1)
 
-        skor_threshold = st.slider("Minimal Skor Risiko untuk TO", 1, 4, 2)
+        skor_threshold = st.slider("Minimal Skor Risiko untuk TO", 1, len(indikator_cols), 3)
         df_to = risk_df[risk_df["skor"] >= skor_threshold].sort_values("skor", ascending=False)
 
         st.metric("Pelanggan Berpotensi TO", len(df_to))
         st.dataframe(df_to.head(1000), use_container_width=True)
-        fig_risk = px.histogram(df_to, x="skor", nbins=4, title="Distribusi Skor Risiko Pelanggan Pascabayar")
+        fig_risk = px.histogram(df_to, x="skor", nbins=len(indikator_cols), title="Distribusi Skor Risiko Pelanggan Pascabayar")
         st.plotly_chart(fig_risk, use_container_width=True)
-        st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
+        st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
 
         if idpel_selected != "Semua":
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {idpel_selected}")
@@ -369,7 +383,6 @@ with tab_pasca:
             st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
-
 with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
