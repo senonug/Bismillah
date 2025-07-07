@@ -308,12 +308,9 @@ with tab_pasca:
             os.remove(olap_path)
             st.success("Histori OLAP berhasil dihapus.")
 
-   if os.path.exists(olap_path):
+    if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
-        st.write("Data OLAP Histori Dibaca:")
 
-        df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH")
-        df_pivot_jam = df.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA")
          with st.expander("📁 Tabel PEMKWH Bulanan"):
             st.dataframe(df_pivot_kwh, use_container_width=True)
             top_kwh = df_pivot_kwh.sum(axis=1).sort_values(ascending=False).head(5).index.tolist()
