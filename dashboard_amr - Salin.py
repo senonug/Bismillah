@@ -282,7 +282,7 @@ with st.expander("📦 AMR", expanded=False):
 # ------------------ TABS LAIN ------------------ #
 tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
 
-with tab_pasca:
+ith tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
     olap_path = "olap_pascabayar.csv"
@@ -299,14 +299,7 @@ with tab_pasca:
                 df_hist = pd.read_csv(olap_path) if os.path.exists(olap_path) else pd.DataFrame()
                 df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"])
                 df_all.to_csv(olap_path, index=False)
-
-                # Simpan backup file
-                tanggal_upload = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                with open(f"uploaded_olap/OLAP_{tanggal_upload}.xlsx", "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-
                 st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
-                st.info(f"✅ {len(df_new)} baris data dari bulan {df_new['THBLREK'].iloc[0]} ditambahkan.")
         except Exception as e:
             st.error(f"Gagal memproses file: {e}")
 
@@ -317,17 +310,14 @@ with tab_pasca:
 
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
-        st.write("Data OLAP Histori Dibaca:", df.head())
 
-        # Tampilkan ringkasan per bulan
-        st.subheader("📆 Ringkasan Data per Bulan")
-        summary = df.groupby("THBLREK").agg(
-            total_idpel=("IDPEL", "nunique"),
-            rata2_kwh=("PEMKWH", "mean"),
-            min_kwh=("PEMKWH", "min"),
-            max_kwh=("PEMKWH", "max")
-        ).reset_index()
-        st.dataframe(summary)
+        with st.expander("📂 Tabel PEMKWH Bulanan"):
+            df_kwh_pivot = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
+            st.dataframe(df_kwh_pivot, use_container_width=True)
+
+        with st.expander("📂 Tabel JAMNYALA Bulanan"):
+            df_jam_pivot = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
+            st.dataframe(df_jam_pivot, use_container_width=True)
     else:
         df = pd.DataFrame()
 
@@ -377,8 +367,7 @@ with tab_pasca:
             fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
             st.plotly_chart(fig_line, use_container_width=True)
     else:
-        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
-with tab_prabayar:
+        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
     uploaded_file = st.file_uploader("📥 Upload File Excel Prabayar", type=["xlsx"], key="prabayar")
