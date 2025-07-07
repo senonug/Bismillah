@@ -312,35 +312,34 @@ with tab_pasca:
         df = pd.read_csv(olap_path)
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
-            unique_idpels = df["IDPEL"].unique().tolist()
-            selected_idpels = st.multiselect("Filter IDPEL", unique_idpels, default=unique_idpels[:20])
-            df_pivot_kwh = df[df["IDPEL"].isin(selected_idpels)].pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
-            st.dataframe(df_pivot_kwh, use_container_width=True)
+            df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
+            idpel_filter_kwh = st.multiselect("Filter IDPEL (Opsional)", df_pivot_kwh.index.tolist(), key="filter_kwh")
+            if idpel_filter_kwh:
+                st.dataframe(df_pivot_kwh.loc[df_pivot_kwh.index.isin(idpel_filter_kwh)], use_container_width=True)
+            else:
+                st.dataframe(df_pivot_kwh, use_container_width=True)
 
         with st.expander("📁 Tabel JAMNYALA Bulanan"):
-            selected_idpels2 = st.multiselect("Filter IDPEL", unique_idpels, default=unique_idpels[:20], key="jamnyala")
-            df_pivot_jam = df[df["IDPEL"].isin(selected_idpels2)].pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
-            st.dataframe(df_pivot_jam, use_container_width=True)
+            df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
+            idpel_filter_jam = st.multiselect("Filter IDPEL (Opsional)", df_pivot_jam.index.tolist(), key="filter_jam")
+            if idpel_filter_jam:
+                st.dataframe(df_pivot_jam.loc[df_pivot_jam.index.isin(idpel_filter_jam)], use_container_width=True)
+            else:
+                st.dataframe(df_pivot_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
 
     if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
 
-        with st.expander("⚙️ Parameter Indikator Risiko"):
-            min_jamnyala = st.number_input("Batas Jam Nyala Minimum", value=50)
-            min_kwh_mean = st.number_input("Rata-rata kWh Rendah jika <", value=50)
-            zero_limit = st.number_input("Jumlah Bulan Pemakaian 0", value=3)
-            min_std_kwh = st.number_input("Batas STD kWh Tinggi", value=200.0)
-            jamnyala_kecil = st.number_input("Jam Nyala Kecil", value=100)
-            kwh_tinggi = st.number_input("kWh Tinggi jika >", value=300.0)
-            zscore_thresh = st.number_input("Batas Z-Score Konsumsi Outlier", value=2.0)
-            min_ratio_last3 = st.slider("Minimal Persentase Pemakaian 3 Bulan Terakhir dibanding Total", 0.0, 1.0, 0.3)
-            drop_percent = st.slider("Penurunan Minimum antara 3 Bulan Terakhir dan Sebelumnya (%)", 0, 100, 50)
-            trend_min = st.slider("Jumlah Bulan Turun Berturut-turut", 2, 6, 3)
+        thblrek_options = sorted(df["THBLREK"].unique())
+        selected_thblrek = st.selectbox("Filter Bulan (THBLREK)", ["Semua"] + thblrek_options)
+        if selected_thblrek != "Semua":
+            df = df[df["THBLREK"] == selected_thblrek]
 
-        df_sorted = df.sort_values(["IDPEL", "THBLREK"])
-        risk_df = df_sorted.groupby("IDPEL").agg(
+        idpel_selected = st.selectbox("Pilih IDPEL untuk Analisis Detail (Opsional)", ["Semua"] + df["IDPEL"].unique().tolist())
+
+        risk_df = df.groupby("IDPEL").agg(
             nama=("NAMA", "first"),
             alamat=("ALAMAT", "first"),
             std_kwh=("PEMKWH", "std"),
@@ -352,52 +351,48 @@ with tab_pasca:
             mean_jamnyala=("JAMNYALA", "mean")
         ).reset_index()
 
-        # Tambahan indikator berbasis tren konsumsi
-        def hitung_tren_penurunan(gr):
-            gr = gr.sort_values("THBLREK")
-            kwhs = gr["PEMKWH"].tolist()
-            return sum(kwhs[i] > kwhs[i + 1] for i in range(len(kwhs) - 1))
+        with st.expander("⚙️ Parameter Indikator Risiko (Opsional)"):
+            manual_setting = True
+            col1, col2 = st.columns(2)
+            with col1:
+                min_jamnyala = st.number_input("Jam Nyala Minimum", value=50)
+                min_kwh_rata = st.number_input("Rata-Rata KWH Minimum", value=50)
+                max_std_kwh = st.number_input("Standar Deviasi Maksimum", value=200)
+            with col2:
+                min_kwh_tinggi = st.number_input("Threshold KWH Tinggi", value=300)
+                max_jamnyala_kecil = st.number_input("Threshold Jam Nyala Kecil", value=100)
+                persen_turun = st.number_input("Penurunan 3 Bulan Terakhir (%)", value=30)
+        
+        if "min_jamnyala" not in locals():
+            manual_setting = False
+            min_jamnyala, min_kwh_rata, max_std_kwh = 50, 50, 200
+            min_kwh_tinggi, max_jamnyala_kecil, persen_turun = 300, 100, 30
 
-        df_sorted["rolling_sum"] = df_sorted.groupby("IDPEL")["PEMKWH"].transform(lambda x: x.rolling(window=3, min_periods=1).sum())
-
-        last3 = df_sorted.groupby("IDPEL")["rolling_sum"].nth(-1)
-        prev3 = df_sorted.groupby("IDPEL")["rolling_sum"].nth(-2)
-
-        ratio_recent = (last3 / df_sorted.groupby("IDPEL")["PEMKWH"].sum()).fillna(0)
-        drop_detected = ((last3 < (prev3 * (1 - drop_percent / 100)))).fillna(False)
-        trend_down_count = df_sorted.groupby("IDPEL").apply(hitung_tren_penurunan)
-
-        risk_df = risk_df.merge(ratio_recent.rename("prop_last3"), on="IDPEL", how="left")
-        risk_df = risk_df.merge(drop_detected.rename("drop_signif"), on="IDPEL", how="left")
-        risk_df = risk_df.merge(trend_down_count.rename("turun_beruntun"), on="IDPEL", how="left")
-
-        # Hitung Z-score
-        if risk_df["count_months"].min() > 1:
-            mean_all = df.groupby("IDPEL")["PEMKWH"].mean()
-            std_all = df.groupby("IDPEL")["PEMKWH"].std()
-            df["zscore"] = (df["PEMKWH"] - df["IDPEL"].map(mean_all)) / df["IDPEL"].map(std_all)
-            outlier_count = df.groupby("IDPEL")["zscore"].apply(lambda x: (abs(x) > zscore_thresh).sum())
-            risk_df = risk_df.merge(outlier_count.rename("zscore_outlier_count"), on="IDPEL", how="left")
-        else:
-            risk_df["zscore_outlier_count"] = 0
-
-        # Indikator
-        risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= zero_limit
+        risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= 3
         risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < min_jamnyala
         risk_df["min_kwh_zero"] = risk_df["min_kwh"] == 0
-        risk_df["rendah_rata"] = risk_df["mean_kwh"] < min_kwh_mean
-        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > min_std_kwh
-        risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < jamnyala_kecil) & (risk_df["mean_kwh"] > kwh_tinggi)
-        risk_df["zscore_outlier"] = risk_df["zscore_outlier_count"] >= 1
-        risk_df["ratio_last3_low"] = risk_df["prop_last3"] < min_ratio_last3
-        risk_df["penurunan_signif"] = risk_df["drop_signif"]
-        risk_df["pola_turun"] = risk_df["turun_beruntun"] >= trend_min
+        risk_df["rendah_rata"] = risk_df["mean_kwh"] < min_kwh_rata
+        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > max_std_kwh
+        risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < max_jamnyala_kecil) & (risk_df["mean_kwh"] > min_kwh_tinggi)
 
-        indikator_cols = [
-            "pemakaian_zero_3x", "jamnyala_abnormal", "min_kwh_zero", "rendah_rata",
-            "variasi_tinggi", "jamnyala_kecil_tapi_kwh_tinggi", "zscore_outlier",
-            "ratio_last3_low", "penurunan_signif", "pola_turun"
-        ]
+        df_sorted = df.sort_values(by=["IDPEL", "THBLREK"])
+        df_sorted["THBLREK"] = df_sorted["THBLREK"].astype(str)
+        last_thblrek = df_sorted["THBLREK"].max()
+
+        last3 = df_sorted.groupby("IDPEL").tail(3).groupby("IDPEL")["PEMKWH"].mean()
+        all_avg = df_sorted.groupby("IDPEL")["PEMKWH"].mean()
+        compare = ((all_avg - last3) / all_avg * 100).fillna(0)
+        risk_df = risk_df.merge(compare.rename("persen_penurunan"), on="IDPEL", how="left")
+        risk_df["konsumsi_3bulan_turun"] = risk_df["persen_penurunan"] > persen_turun
+
+        def detect_trend(gr):
+            vals = gr.sort_values("THBLREK")["PEMKWH"].values
+            return all(earlier > later for earlier, later in zip(vals, vals[1:])) if len(vals) >= 3 else False
+
+        tren = df_sorted.groupby("IDPEL").apply(detect_trend).reset_index(name="tren_turun")
+        risk_df = risk_df.merge(tren, on="IDPEL", how="left")
+
+        indikator_cols = ["pemakaian_zero_3x", "jamnyala_abnormal", "min_kwh_zero", "rendah_rata", "variasi_tinggi", "jamnyala_kecil_tapi_kwh_tinggi", "konsumsi_3bulan_turun", "tren_turun"]
         risk_df["skor"] = risk_df[indikator_cols].sum(axis=1)
 
         skor_threshold = st.slider("Minimal Skor Risiko untuk TO", 1, len(indikator_cols), 3)
