@@ -286,7 +286,7 @@ with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
     olap_path = "olap_pascabayar.csv"
-    uploaded_file = st.file_uploader("📅 Upload File OLAP Pascabayar Bulanan", type=["xlsx"], key="pasca")
+    uploaded_file = st.file_uploader("📥 Upload File OLAP Pascabayar Bulanan", type=["xlsx"], key="pasca")
 
     if uploaded_file:
         try:
@@ -312,11 +312,14 @@ with tab_pasca:
         df = pd.read_csv(olap_path)
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
-            df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
+            unique_idpels = df["IDPEL"].unique().tolist()
+            selected_idpels = st.multiselect("Filter IDPEL", unique_idpels, default=unique_idpels[:20])
+            df_pivot_kwh = df[df["IDPEL"].isin(selected_idpels)].pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
             st.dataframe(df_pivot_kwh, use_container_width=True)
 
         with st.expander("📁 Tabel JAMNYALA Bulanan"):
-            df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
+            selected_idpels2 = st.multiselect("Filter IDPEL", unique_idpels, default=unique_idpels[:20], key="jamnyala")
+            df_pivot_jam = df[df["IDPEL"].isin(selected_idpels2)].pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
             st.dataframe(df_pivot_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
@@ -324,14 +327,20 @@ with tab_pasca:
     if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
 
-        thblrek_options = sorted(df["THBLREK"].unique())
-        selected_thblrek = st.selectbox("Filter Bulan (THBLREK)", ["Semua"] + thblrek_options)
-        if selected_thblrek != "Semua":
-            df = df[df["THBLREK"] == selected_thblrek]
+        with st.expander("⚙️ Parameter Indikator Risiko"):
+            min_jamnyala = st.number_input("Batas Jam Nyala Minimum", value=50)
+            min_kwh_mean = st.number_input("Rata-rata kWh Rendah jika <", value=50)
+            zero_limit = st.number_input("Jumlah Bulan Pemakaian 0", value=3)
+            min_std_kwh = st.number_input("Batas STD kWh Tinggi", value=200.0)
+            jamnyala_kecil = st.number_input("Jam Nyala Kecil", value=100)
+            kwh_tinggi = st.number_input("kWh Tinggi jika >", value=300.0)
+            zscore_thresh = st.number_input("Batas Z-Score Konsumsi Outlier", value=2.0)
+            min_ratio_last3 = st.slider("Minimal Persentase Pemakaian 3 Bulan Terakhir dibanding Total", 0.0, 1.0, 0.3)
+            drop_percent = st.slider("Penurunan Minimum antara 3 Bulan Terakhir dan Sebelumnya (%)", 0, 100, 50)
+            trend_min = st.slider("Jumlah Bulan Turun Berturut-turut", 2, 6, 3)
 
-        idpel_selected = st.selectbox("Pilih IDPEL untuk Analisis Detail (Opsional)", ["Semua"] + df["IDPEL"].unique().tolist())
-
-        risk_df = df.groupby("IDPEL").agg(
+        df_sorted = df.sort_values(["IDPEL", "THBLREK"])
+        risk_df = df_sorted.groupby("IDPEL").agg(
             nama=("NAMA", "first"),
             alamat=("ALAMAT", "first"),
             std_kwh=("PEMKWH", "std"),
@@ -343,27 +352,51 @@ with tab_pasca:
             mean_jamnyala=("JAMNYALA", "mean")
         ).reset_index()
 
-        with st.expander("⚙️ Parameter Indikator Risiko"):
-            col1, col2 = st.columns(2)
-            with col1:
-                min_jamnyala = st.number_input("Jam Nyala Abnormal (<)", min_value=0, value=50)
-                min_kwh_mean = st.number_input("Rata-rata KWH Rendah (<)", min_value=0, value=50)
-                min_jamnyala_kwh = st.number_input("Jam Nyala < untuk anomali KWH tinggi", min_value=0, value=100)
-                min_kwh_high = st.number_input("KWH > untuk anomali Jam Nyala kecil", min_value=0, value=300)
-            with col2:
-                min_std_kwh = st.number_input("Variasi KWH Tinggi (std >)", min_value=0, value=200)
-                zero_limit = st.number_input("Bulan dengan KWH 0 (>=)", min_value=1, value=3)
+        # Tambahan indikator berbasis tren konsumsi
+        def hitung_tren_penurunan(gr):
+            gr = gr.sort_values("THBLREK")
+            kwhs = gr["PEMKWH"].tolist()
+            return sum(kwhs[i] > kwhs[i + 1] for i in range(len(kwhs) - 1))
 
+        df_sorted["rolling_sum"] = df_sorted.groupby("IDPEL")["PEMKWH"].transform(lambda x: x.rolling(window=3, min_periods=1).sum())
+
+        last3 = df_sorted.groupby("IDPEL")["rolling_sum"].nth(-1)
+        prev3 = df_sorted.groupby("IDPEL")["rolling_sum"].nth(-2)
+
+        ratio_recent = (last3 / df_sorted.groupby("IDPEL")["PEMKWH"].sum()).fillna(0)
+        drop_detected = ((last3 < (prev3 * (1 - drop_percent / 100)))).fillna(False)
+        trend_down_count = df_sorted.groupby("IDPEL").apply(hitung_tren_penurunan)
+
+        risk_df = risk_df.merge(ratio_recent.rename("prop_last3"), on="IDPEL", how="left")
+        risk_df = risk_df.merge(drop_detected.rename("drop_signif"), on="IDPEL", how="left")
+        risk_df = risk_df.merge(trend_down_count.rename("turun_beruntun"), on="IDPEL", how="left")
+
+        # Hitung Z-score
+        if risk_df["count_months"].min() > 1:
+            mean_all = df.groupby("IDPEL")["PEMKWH"].mean()
+            std_all = df.groupby("IDPEL")["PEMKWH"].std()
+            df["zscore"] = (df["PEMKWH"] - df["IDPEL"].map(mean_all)) / df["IDPEL"].map(std_all)
+            outlier_count = df.groupby("IDPEL")["zscore"].apply(lambda x: (abs(x) > zscore_thresh).sum())
+            risk_df = risk_df.merge(outlier_count.rename("zscore_outlier_count"), on="IDPEL", how="left")
+        else:
+            risk_df["zscore_outlier_count"] = 0
+
+        # Indikator
         risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= zero_limit
         risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < min_jamnyala
         risk_df["min_kwh_zero"] = risk_df["min_kwh"] == 0
         risk_df["rendah_rata"] = risk_df["mean_kwh"] < min_kwh_mean
         risk_df["variasi_tinggi"] = risk_df["std_kwh"] > min_std_kwh
-        risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < min_jamnyala_kwh) & (risk_df["mean_kwh"] > min_kwh_high)
+        risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < jamnyala_kecil) & (risk_df["mean_kwh"] > kwh_tinggi)
+        risk_df["zscore_outlier"] = risk_df["zscore_outlier_count"] >= 1
+        risk_df["ratio_last3_low"] = risk_df["prop_last3"] < min_ratio_last3
+        risk_df["penurunan_signif"] = risk_df["drop_signif"]
+        risk_df["pola_turun"] = risk_df["turun_beruntun"] >= trend_min
 
         indikator_cols = [
-            "pemakaian_zero_3x", "jamnyala_abnormal", "min_kwh_zero",
-            "rendah_rata", "variasi_tinggi", "jamnyala_kecil_tapi_kwh_tinggi"
+            "pemakaian_zero_3x", "jamnyala_abnormal", "min_kwh_zero", "rendah_rata",
+            "variasi_tinggi", "jamnyala_kecil_tapi_kwh_tinggi", "zscore_outlier",
+            "ratio_last3_low", "penurunan_signif", "pola_turun"
         ]
         risk_df["skor"] = risk_df[indikator_cols].sum(axis=1)
 
@@ -374,7 +407,7 @@ with tab_pasca:
         st.dataframe(df_to.head(1000), use_container_width=True)
         fig_risk = px.histogram(df_to, x="skor", nbins=len(indikator_cols), title="Distribusi Skor Risiko Pelanggan Pascabayar")
         st.plotly_chart(fig_risk, use_container_width=True)
-        st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
+        st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
 
         if idpel_selected != "Semua":
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {idpel_selected}")
@@ -382,8 +415,7 @@ with tab_pasca:
             fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
             st.plotly_chart(fig_line, use_container_width=True)
     else:
-        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
-with tab_prabayar:
+        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
     uploaded_file = st.file_uploader("📥 Upload File Excel Prabayar", type=["xlsx"], key="prabayar")
