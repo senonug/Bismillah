@@ -310,26 +310,6 @@ with tab_pasca:
 
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
-
-        # Tambahan: pivot data agar grafik jalan
-        df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="sum").fillna(0)
-        df_pivot_jam = df.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="sum").fillna(0)
-
-        with st.expander("📁 Tabel PEMKWH Bulanan"):
-            st.dataframe(df_pivot_kwh, use_container_width=True)
-            top_kwh = df_pivot_kwh.sum(axis=1).sort_values(ascending=False).head(5).index.tolist()
-            fig_kwh = px.line(df_pivot_kwh.loc[top_kwh].T,
-                              labels={"value": "PEMKWH", "index": "Bulan", "variable": "IDPEL"},
-                              title="Trend Konsumsi KWH per Bulan")
-            st.plotly_chart(fig_kwh, use_container_width=True)
-
-        with st.expander("📁 Tabel JAMNYALA Bulanan"):
-            st.dataframe(df_pivot_jam, use_container_width=True)
-            top_jam = df_pivot_jam.mean(axis=1).sort_values(ascending=False).head(5).index.tolist()
-            fig_jam = px.line(df_pivot_jam.loc[top_jam].T,
-                              labels={"value": "Jam Nyala", "index": "Bulan", "variable": "IDPEL"},
-                              title="Trend Jam Nyala per Bulan")
-            st.plotly_chart(fig_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
 
@@ -341,7 +321,7 @@ with tab_pasca:
         if selected_thblrek != "Semua":
             df = df[df["THBLREK"] == selected_thblrek]
 
-        idpel_selected = st.selectbox("Pilih IDPEL untuk Analisis Detail (Opsional)", ["Semua"] + df["IDPEL"].unique().tolist())
+        idpel_selected = st.selectbox("Pilih IDPEL untuk Analisis Detail", ["Semua"] + df["IDPEL"].unique().tolist())
 
         risk_df = df.groupby("IDPEL").agg(
             nama=("NAMA", "first"),
@@ -376,10 +356,19 @@ with tab_pasca:
         if idpel_selected != "Semua":
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {idpel_selected}")
             df_idpel = df[df["IDPEL"] == idpel_selected].sort_values("THBLREK")
-            fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
-            st.plotly_chart(fig_line, use_container_width=True)
+            if not df_idpel.empty:
+                fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
+                st.plotly_chart(fig_line, use_container_width=True)
+
+                fig_jam = px.line(df_idpel, x="THBLREK", y="JAMNYALA", title="Grafik Jam Nyala Bulanan")
+                st.plotly_chart(fig_jam, use_container_width=True)
+            else:
+                st.warning("Data IDPEL tidak ditemukan untuk visualisasi.")
+        else:
+            st.info("Silakan pilih IDPEL untuk melihat grafik konsumsi dan jam nyala.")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
+
 
 with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
