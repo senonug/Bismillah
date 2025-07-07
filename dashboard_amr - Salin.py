@@ -415,7 +415,8 @@ with tab_pasca:
             fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
             st.plotly_chart(fig_line, use_container_width=True)
     else:
-        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")with tab_prabayar:
+        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
+with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
     uploaded_file = st.file_uploader("📥 Upload File Excel Prabayar", type=["xlsx"], key="prabayar")
