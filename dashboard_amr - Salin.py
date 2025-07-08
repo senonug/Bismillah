@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import os
 import plotly.express as px
 
@@ -332,14 +331,6 @@ with tab_pasca:
 
         idpel_selected = st.selectbox("Pilih IDPEL untuk Analisis Detail (Opsional)", ["Semua"] + df["IDPEL"].unique().tolist())
 
-        with st.expander("⚙️ Parameter Indikator Risiko (Opsional)"):
-            min_jamnyala = st.number_input("Jam Nyala Minimum", value=50)
-            min_kwh_mean = st.number_input("Rata-Rata KWH Minimum", value=50)
-            max_std = st.number_input("Standar Deviasi Maksimum", value=200)
-            threshold_kwh_tinggi = st.number_input("Threshold KWH Tinggi", value=300)
-            threshold_jamnyala_kecil = st.number_input("Threshold Jam Nyala Kecil", value=100)
-            threshold_drop = st.number_input("Penurunan 3 Bulan Terakhir (%)", value=30)
-
         risk_df = df.groupby("IDPEL").agg(
             nama=("NAMA", "first"),
             alamat=("ALAMAT", "first"),
@@ -353,20 +344,28 @@ with tab_pasca:
         ).reset_index()
 
         risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= 3
-        risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < min_jamnyala
+        risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < 50
         risk_df["min_kwh_zero"] = risk_df["min_kwh"] == 0
-        risk_df["rendah_rata"] = risk_df["mean_kwh"] < min_kwh_mean
-        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > max_std
-        risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < threshold_jamnyala_kecil) & (risk_df["mean_kwh"] > threshold_kwh_tinggi)
+        risk_df["rendah_rata"] = risk_df["mean_kwh"] < 50
+
+        # Indikator tambahan
+        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > 200
+        risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < 100) & (risk_df["mean_kwh"] > 300)
 
         indikator_cols = [
-            "pemakaian_zero_3x",
-            "jamnyala_abnormal",
-            "min_kwh_zero",
-            "rendah_rata",
-            "variasi_tinggi",
-            "jamnyala_kecil_tapi_kwh_tinggi"
+            "pemakaian_zero_3x", "jamnyala_abnormal", "min_kwh_zero",
+            "rendah_rata", "variasi_tinggi", "jamnyala_kecil_tapi_kwh_tinggi"
         ]
+
+        # Penurunan pemakaian 3 bulan terakhir
+        df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
+        avg_all = df_pivot_kwh.mean(axis=1)
+        avg_3 = df_pivot_kwh.iloc[:, -3:].mean(axis=1)
+        drop_pct = ((avg_all - avg_3) / avg_all.replace(0, np.nan)) * 100
+
+        risk_df["penurunan_3bulan"] = drop_pct > 30
+        indikator_cols.append("penurunan_3bulan")
+
         risk_df["skor"] = risk_df[indikator_cols].sum(axis=1)
 
         skor_threshold = st.slider("Minimal Skor Risiko untuk TO", 1, len(indikator_cols), 3)
