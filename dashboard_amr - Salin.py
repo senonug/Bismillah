@@ -312,10 +312,20 @@ with tab_pasca:
         df = pd.read_csv(olap_path)
 
         st.markdown("## 🔍 Visualisasi Pemakaian Pelanggan")
-        filter_idpel = st.selectbox("Pilih IDPEL untuk Lihat Riwayat dan Grafik", ["Semua"] + sorted(df["IDPEL"].unique()))
+
+        # Tetap tampilkan tab tabel, lalu filter di luar
+        with st.expander("📁 Tabel PEMKWH Bulanan"):
+            df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
+            st.dataframe(df_pivot_kwh, use_container_width=True)
+
+        with st.expander("📁 Tabel JAMNYALA Bulanan"):
+            df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
+            st.dataframe(df_pivot_jam, use_container_width=True)
+
+        # Filter IDPEL di bawah tab
+        filter_idpel = st.selectbox("🔍 Pilih IDPEL untuk Tampilkan Grafik & Tabel Individu", ["Semua"] + sorted(df["IDPEL"].unique()))
         if filter_idpel != "Semua":
             df_filtered = df[df["IDPEL"] == filter_idpel]
-
             st.markdown("### 📊 Grafik Riwayat PEMKWH")
             fig_kwh = px.line(df_filtered.sort_values("THBLREK"), x="THBLREK", y="PEMKWH", title=f"Grafik KWH Bulanan: {filter_idpel}")
             st.plotly_chart(fig_kwh, use_container_width=True)
@@ -323,23 +333,12 @@ with tab_pasca:
             st.markdown("### 📊 Grafik Riwayat JAMNYALA")
             fig_jam = px.line(df_filtered.sort_values("THBLREK"), x="THBLREK", y="JAMNYALA", title=f"Grafik Jam Nyala Bulanan: {filter_idpel}")
             st.plotly_chart(fig_jam, use_container_width=True)
-
-            with st.expander("📁 Data Tabel PEMKWH Bulanan"):
-                df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
-                st.dataframe(df_pivot_kwh.loc[[filter_idpel]], use_container_width=True)
-
-            with st.expander("📁 Data Tabel JAMNYALA Bulanan"):
-                df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
-                st.dataframe(df_pivot_jam.loc[[filter_idpel]], use_container_width=True)
-        else:
-            st.info("Silakan pilih IDPEL untuk melihat detail grafik dan data.")
     else:
         df = pd.DataFrame()
 
     if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
 
-        # Tombol Terapkan Parameter
         with st.expander("⚙️ Parameter Indikator Risiko (Opsional)", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
@@ -360,7 +359,7 @@ with tab_pasca:
             drop_pct = ((avg_all - avg_3) / avg_all.replace(0, np.nan)) * 100
             full_zero_3bulan = (recent_3 == 0).all(axis=1)
 
-            risk_df = df.groupby("IDPEL").agg(
+            risk_df = df.groupby("IDPEL", sort=False).agg(
                 nama=("NAMA", "first"),
                 alamat=("ALAMAT", "first"),
                 std_kwh=("PEMKWH", "std"),
@@ -396,12 +395,6 @@ with tab_pasca:
             fig_risk = px.histogram(df_to, x="skor", nbins=len(indikator_cols), title="Distribusi Skor Risiko Pelanggan Pascabayar")
             st.plotly_chart(fig_risk, use_container_width=True)
             st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
-
-            if filter_idpel != "Semua":
-                df_idpel = df[df["IDPEL"] == filter_idpel].sort_values("THBLREK")
-                st.subheader(f"📈 Riwayat Konsumsi Pelanggan {filter_idpel}")
-                fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
-                st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
 with tab_prabayar:
