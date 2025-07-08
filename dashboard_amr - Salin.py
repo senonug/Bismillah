@@ -311,89 +311,97 @@ with tab_pasca:
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
 
-        st.markdown("### 📂 Data OLAP Bulanan")
-        idpel_filter = st.multiselect("Filter IDPEL (Opsional)", df["IDPEL"].unique().tolist(), placeholder="Pilih IDPEL jika ingin menyaring")
-        df_filtered = df[df["IDPEL"].isin(idpel_filter)] if idpel_filter else df
+        st.markdown("## 🔍 Visualisasi Pemakaian Pelanggan")
+        filter_idpel = st.selectbox("Pilih IDPEL untuk Lihat Riwayat dan Grafik", ["Semua"] + sorted(df["IDPEL"].unique()))
+        if filter_idpel != "Semua":
+            df_filtered = df[df["IDPEL"] == filter_idpel]
 
-        with st.expander("📁 Tabel PEMKWH Bulanan"):
-            df_pivot_kwh = df_filtered.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
-            st.dataframe(df_pivot_kwh, use_container_width=True)
+            st.markdown("### 📊 Grafik Riwayat PEMKWH")
+            fig_kwh = px.line(df_filtered.sort_values("THBLREK"), x="THBLREK", y="PEMKWH", title=f"Grafik KWH Bulanan: {filter_idpel}")
+            st.plotly_chart(fig_kwh, use_container_width=True)
 
-        with st.expander("📁 Tabel JAMNYALA Bulanan"):
-            df_pivot_jam = df_filtered.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
-            st.dataframe(df_pivot_jam, use_container_width=True)
+            st.markdown("### 📊 Grafik Riwayat JAMNYALA")
+            fig_jam = px.line(df_filtered.sort_values("THBLREK"), x="THBLREK", y="JAMNYALA", title=f"Grafik Jam Nyala Bulanan: {filter_idpel}")
+            st.plotly_chart(fig_jam, use_container_width=True)
+
+            with st.expander("📁 Data Tabel PEMKWH Bulanan"):
+                df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
+                st.dataframe(df_pivot_kwh.loc[[filter_idpel]], use_container_width=True)
+
+            with st.expander("📁 Data Tabel JAMNYALA Bulanan"):
+                df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
+                st.dataframe(df_pivot_jam.loc[[filter_idpel]], use_container_width=True)
+        else:
+            st.info("Silakan pilih IDPEL untuk melihat detail grafik dan data.")
     else:
         df = pd.DataFrame()
 
     if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
 
-        thblrek_options = sorted(df["THBLREK"].unique())
-        selected_thblrek = st.selectbox("Filter Bulan (THBLREK)", ["Semua"] + thblrek_options)
-        if selected_thblrek != "Semua":
-            df = df[df["THBLREK"] == selected_thblrek]
+        # Tombol Terapkan Parameter
+        with st.expander("⚙️ Parameter Indikator Risiko (Opsional)", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                min_jamnyala = st.number_input("Jam Nyala Minimum", value=50)
+                min_kwh_avg = st.number_input("Rata-Rata KWH Minimum", value=50)
+                max_std = st.number_input("Standar Deviasi Maksimum", value=200)
+            with col2:
+                threshold_kwh_tinggi = st.number_input("Threshold KWH Tinggi", value=300)
+                threshold_jamnyala_kecil = st.number_input("Threshold Jam Nyala Kecil", value=100)
+                penurunan_3bulan = st.number_input("Penurunan 3 Bulan Terakhir (%)", value=30)
+            apply_btn = st.button("✅ Terapkan Parameter")
 
-        idpel_selected = st.selectbox("Pilih IDPEL untuk Analisis Detail (Opsional)", ["Semua"] + df["IDPEL"].unique().tolist())
+        if apply_btn:
+            df_pivot = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH").fillna(0)
+            recent_3 = df_pivot.iloc[:, -3:]
+            avg_3 = recent_3.mean(axis=1)
+            avg_all = df_pivot.mean(axis=1)
+            drop_pct = ((avg_all - avg_3) / avg_all.replace(0, np.nan)) * 100
+            full_zero_3bulan = (recent_3 == 0).all(axis=1)
 
-        apply_custom = st.checkbox("🧠 Gunakan Parameter Indikator Risiko (Opsional)", value=False)
+            risk_df = df.groupby("IDPEL").agg(
+                nama=("NAMA", "first"),
+                alamat=("ALAMAT", "first"),
+                std_kwh=("PEMKWH", "std"),
+                mean_kwh=("PEMKWH", "mean"),
+                min_kwh=("PEMKWH", "min"),
+                max_kwh=("PEMKWH", "max"),
+                zero_count=("PEMKWH", lambda x: (x == 0).sum()),
+                count_months=("PEMKWH", "count"),
+                mean_jamnyala=("JAMNYALA", "mean")
+            ).reset_index()
 
-        if apply_custom:
-            with st.expander("⚙️ Parameter Indikator Risiko"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    jamnyala_min = st.number_input("Jam Nyala Minimum", value=50)
-                    mean_kwh_min = st.number_input("Rata-Rata KWH Minimum", value=50)
-                    std_kwh_max = st.number_input("Standar Deviasi Maksimum", value=200)
-                with col2:
-                    kwh_high = st.number_input("Threshold KWH Tinggi", value=300)
-                    jamnyala_kecil = st.number_input("Threshold Jam Nyala Kecil", value=100)
-                    penurunan_3bln = st.number_input("Penurunan 3 Bulan Terakhir (%)", value=30)
-
-        risk_df = df.groupby("IDPEL").agg(
-            nama=("NAMA", "first"),
-            alamat=("ALAMAT", "first"),
-            std_kwh=("PEMKWH", "std"),
-            mean_kwh=("PEMKWH", "mean"),
-            min_kwh=("PEMKWH", "min"),
-            max_kwh=("PEMKWH", "max"),
-            zero_count=("PEMKWH", lambda x: (x == 0).sum()),
-            count_months=("PEMKWH", "count"),
-            mean_jamnyala=("JAMNYALA", "mean")
-        ).reset_index()
-
-        if apply_custom:
             risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= 3
-            risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < jamnyala_min
+            risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < min_jamnyala
             risk_df["min_kwh_zero"] = risk_df["min_kwh"] == 0
-            risk_df["rendah_rata"] = risk_df["mean_kwh"] < mean_kwh_min
-            risk_df["variasi_tinggi"] = risk_df["std_kwh"] > std_kwh_max
-            risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < jamnyala_kecil) & (risk_df["mean_kwh"] > kwh_high)
-        else:
-            # Default logika dashboard
-            risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= 3
-            risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < 50
-            risk_df["min_kwh_zero"] = risk_df["min_kwh"] == 0
-            risk_df["rendah_rata"] = risk_df["mean_kwh"] < 50
-            risk_df["variasi_tinggi"] = risk_df["std_kwh"] > 200
-            risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < 100) & (risk_df["mean_kwh"] > 300)
+            risk_df["rendah_rata"] = risk_df["mean_kwh"] < min_kwh_avg
+            risk_df["variasi_tinggi"] = risk_df["std_kwh"] > max_std
+            risk_df["jamnyala_kecil_tapi_kwh_tinggi"] = (risk_df["mean_jamnyala"] < threshold_jamnyala_kecil) & (risk_df["mean_kwh"] > threshold_kwh_tinggi)
+            risk_df["penurunan_dramatis"] = drop_pct > penurunan_3bulan
+            risk_df["full_zero_3bulan"] = risk_df["IDPEL"].isin(full_zero_3bulan[full_zero_3bulan].index)
 
-        indikator_cols = ["pemakaian_zero_3x", "jamnyala_abnormal", "min_kwh_zero", "rendah_rata", "variasi_tinggi", "jamnyala_kecil_tapi_kwh_tinggi"]
-        risk_df["skor"] = risk_df[indikator_cols].sum(axis=1)
+            indikator_cols = [
+                "pemakaian_zero_3x", "jamnyala_abnormal", "min_kwh_zero", "rendah_rata",
+                "variasi_tinggi", "jamnyala_kecil_tapi_kwh_tinggi", "penurunan_dramatis"
+            ]
 
-        skor_threshold = st.slider("Minimal Skor Risiko untuk TO", 1, len(indikator_cols), 3)
-        df_to = risk_df[risk_df["skor"] >= skor_threshold].sort_values("skor", ascending=False)
+            risk_df["skor"] = risk_df[indikator_cols].sum(axis=1)
+            skor_threshold = st.slider("Minimal Skor Risiko untuk TO", 1, len(indikator_cols), 3)
 
-        st.metric("Pelanggan Berpotensi TO", len(df_to))
-        st.dataframe(df_to.head(1000), use_container_width=True)
-        fig_risk = px.histogram(df_to, x="skor", nbins=len(indikator_cols), title="Distribusi Skor Risiko Pelanggan Pascabayar")
-        st.plotly_chart(fig_risk, use_container_width=True)
-        st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
+            df_to = risk_df[(risk_df["skor"] >= skor_threshold) & (~risk_df["full_zero_3bulan"])].sort_values("skor", ascending=False)
 
-        if idpel_selected != "Semua":
-            st.subheader(f"📈 Riwayat Konsumsi Pelanggan {idpel_selected}")
-            df_idpel = df[df["IDPEL"] == idpel_selected].sort_values("THBLREK")
-            fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
-            st.plotly_chart(fig_line, use_container_width=True)
+            st.metric("Pelanggan Berpotensi TO", len(df_to))
+            st.dataframe(df_to.head(1000), use_container_width=True)
+            fig_risk = px.histogram(df_to, x="skor", nbins=len(indikator_cols), title="Distribusi Skor Risiko Pelanggan Pascabayar")
+            st.plotly_chart(fig_risk, use_container_width=True)
+            st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
+
+            if filter_idpel != "Semua":
+                df_idpel = df[df["IDPEL"] == filter_idpel].sort_values("THBLREK")
+                st.subheader(f"📈 Riwayat Konsumsi Pelanggan {filter_idpel}")
+                fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
+                st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
 with tab_prabayar:
