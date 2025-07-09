@@ -282,6 +282,8 @@ with st.expander("📦 AMR", expanded=False):
 # ------------------ TABS LAIN ------------------ #
 tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
 
+tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
+
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
@@ -312,10 +314,7 @@ with tab_pasca:
         df = pd.read_csv(olap_path)
 
         # Filter IDPEL Global
-        selected_idpel = st.selectbox(
-    "🔍 Pilih IDPEL untuk Tabel & Grafik",
-    ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
-     )
+        selected_idpel = st.selectbox("🔍 Pilih IDPEL untuk Tabel & Grafik", ["Semua"] + sorted(df["IDPEL"].unique()))
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
             df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
