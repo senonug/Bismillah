@@ -296,8 +296,7 @@ with tab_pasca:
                 st.error("Kolom yang dibutuhkan tidak lengkap dalam file.")
             else:
                 df_new = df_new[required_cols].dropna(subset=["IDPEL"])
-                df_new["THBLREK"] = pd.to_numeric(df_new["THBLREK"], errors="coerce")
-
+                df_new = df_new.drop_duplicates(subset=["THBLREK", "IDPEL"])
                 df_hist = pd.read_csv(olap_path) if os.path.exists(olap_path) else pd.DataFrame()
                 df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"])
                 df_all.to_csv(olap_path, index=False)
@@ -305,16 +304,14 @@ with tab_pasca:
         except Exception as e:
             st.error(f"Gagal memproses file: {e}")
 
-    if st.button("🗑 Hapus Histori OLAP Pascabayar"):
-        if os.path.exists(olap_path):
-            if st.confirm("Apakah Anda yakin ingin menghapus seluruh histori OLAP Pascabayar?"):
+    if os.path.exists(olap_path):
+        if st.button("🗑 Hapus Histori OLAP Pascabayar"):
+            if st.confirm("Apakah Anda yakin ingin menghapus seluruh histori OLAP?"):
                 os.remove(olap_path)
                 st.success("Histori OLAP berhasil dihapus.")
 
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
-        df["THBLREK"] = pd.to_numeric(df["THBLREK"], errors="coerce")
-        df = df.dropna(subset=["THBLREK", "IDPEL"])
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
             df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="first")
