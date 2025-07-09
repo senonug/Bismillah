@@ -312,7 +312,10 @@ with tab_pasca:
         df = pd.read_csv(olap_path)
 
         # Filter IDPEL Global
-        selected_idpel = st.selectbox("🔍 Pilih IDPEL untuk Tabel & Grafik", ["Semua"] + sorted(df["IDPEL"].unique()))
+        selected_idpel = st.selectbox(
+    "🔍 Pilih IDPEL untuk Tabel & Grafik",
+    ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
+     )
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
             df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
