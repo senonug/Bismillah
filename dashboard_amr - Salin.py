@@ -292,33 +292,34 @@ with tab_pasca:
         try:
             df_new = pd.read_excel(uploaded_file)
             required_cols = ["THBLREK", "IDPEL", "NAMA", "ALAMAT", "NAMAGARDU", "KDDK", "PEMKWH", "JAMNYALA"]
-            if not set(required_cols).issubset(df_new.columns):
-                st.error("Kolom yang dibutuhkan tidak lengkap dalam file.")
-            else:
-                df_new = df_new[required_cols].dropna(subset=["IDPEL"])
-                df_new = df_new.drop_duplicates(subset=["THBLREK", "IDPEL"])
-                df_hist = pd.read_csv(olap_path) if os.path.exists(olap_path) else pd.DataFrame()
-                df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"])
-                df_all.to_csv(olap_path, index=False)
-                st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
+            df_new = df_new.loc[:, df_new.columns.isin(required_cols)]
+            df_new = df_new.dropna(subset=["IDPEL", "THBLREK", "PEMKWH", "JAMNYALA"])
+            df_new = df_new.astype({"THBLREK": "int64", "IDPEL": "str"})
+
+            df_hist = pd.read_csv(olap_path) if os.path.exists(olap_path) else pd.DataFrame()
+            df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"])
+            df_all.to_csv(olap_path, index=False)
+            st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
         except Exception as e:
             st.error(f"Gagal memproses file: {e}")
 
-    if os.path.exists(olap_path):
-        if st.button("🗑 Hapus Histori OLAP Pascabayar"):
-            if st.confirm("Apakah Anda yakin ingin menghapus seluruh histori OLAP?"):
-                os.remove(olap_path)
-                st.success("Histori OLAP berhasil dihapus.")
+    with st.expander("⚠️ Hapus Data Histori"):
+        if st.checkbox("Saya yakin ingin menghapus semua data histori OLAP"):
+            if st.button("🗑 Konfirmasi Hapus Histori"):
+                if os.path.exists(olap_path):
+                    os.remove(olap_path)
+                    st.success("Histori berhasil dihapus.")
 
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
+        df = df.dropna(subset=["THBLREK", "IDPEL", "PEMKWH", "JAMNYALA"])
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
-            df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="first")
+            df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
             st.dataframe(df_pivot_kwh, use_container_width=True)
 
         with st.expander("📁 Tabel JAMNYALA Bulanan"):
-            df_pivot_jam = df.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="first")
+            df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
             st.dataframe(df_pivot_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
@@ -326,7 +327,8 @@ with tab_pasca:
     if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
 
-        thblrek_options = sorted(df["THBLREK"].dropna().unique())
+        df["THBLREK"] = pd.to_numeric(df["THBLREK"], errors='coerce').dropna().astype(int)
+        thblrek_options = sorted(df["THBLREK"].unique())
         selected_thblrek = st.selectbox("Filter Bulan (THBLREK)", ["Semua"] + thblrek_options)
         if selected_thblrek != "Semua":
             df = df[df["THBLREK"] == selected_thblrek]
@@ -360,7 +362,7 @@ with tab_pasca:
         risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < min_jamnyala
         risk_df["min_kwh_zero"] = risk_df["min_kwh"] == 0
         risk_df["rendah_rata"] = risk_df["mean_kwh"] < min_kwh_mean
-        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > max_std
+        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > max_std  
 
         indikator_cols = [
             "pemakaian_zero_3x",
