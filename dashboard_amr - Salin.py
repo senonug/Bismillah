@@ -305,12 +305,15 @@ with tab_pasca:
 
     if st.button("🗑 Hapus Histori OLAP Pascabayar"):
         if os.path.exists(olap_path):
-            if st.confirm("Apakah Anda yakin ingin menghapus semua histori OLAP?"):
+            if st.confirm("Apakah Anda yakin ingin menghapus seluruh histori OLAP Pascabayar?"):
                 os.remove(olap_path)
                 st.success("Histori OLAP berhasil dihapus.")
 
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
+
+        if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
+            st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data akan dirata-ratakan.")
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
             df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="mean")
@@ -377,7 +380,7 @@ with tab_pasca:
         st.dataframe(df_to.head(1000), use_container_width=True)
         fig_risk = px.histogram(df_to, x="skor", nbins=len(indikator_cols), title="Distribusi Skor Risiko Pelanggan Pascabayar")
         st.plotly_chart(fig_risk, use_container_width=True)
-        st.download_button("📤 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
+        st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
 
         if selected_idpel != "Semua":
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
@@ -385,8 +388,7 @@ with tab_pasca:
             fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
             st.plotly_chart(fig_line, use_container_width=True)
     else:
-        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
-with tab_prabayar:
+        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
     uploaded_file = st.file_uploader("📥 Upload File Excel Prabayar", type=["xlsx"], key="prabayar")
