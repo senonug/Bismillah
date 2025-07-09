@@ -296,6 +296,8 @@ with tab_pasca:
                 st.error("Kolom yang dibutuhkan tidak lengkap dalam file.")
             else:
                 df_new = df_new[required_cols].dropna(subset=["IDPEL"])
+                df_new["THBLREK"] = pd.to_numeric(df_new["THBLREK"], errors="coerce")
+
                 df_hist = pd.read_csv(olap_path) if os.path.exists(olap_path) else pd.DataFrame()
                 df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"])
                 df_all.to_csv(olap_path, index=False)
@@ -305,18 +307,21 @@ with tab_pasca:
 
     if st.button("🗑 Hapus Histori OLAP Pascabayar"):
         if os.path.exists(olap_path):
-            os.remove(olap_path)
-            st.success("Histori OLAP berhasil dihapus.")
+            if st.confirm("Apakah Anda yakin ingin menghapus seluruh histori OLAP Pascabayar?"):
+                os.remove(olap_path)
+                st.success("Histori OLAP berhasil dihapus.")
 
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
+        df["THBLREK"] = pd.to_numeric(df["THBLREK"], errors="coerce")
+        df = df.dropna(subset=["THBLREK", "IDPEL"])
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
-            df_pivot_kwh = df.pivot(index="IDPEL", columns="THBLREK", values="PEMKWH")
+            df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="first")
             st.dataframe(df_pivot_kwh, use_container_width=True)
 
         with st.expander("📁 Tabel JAMNYALA Bulanan"):
-            df_pivot_jam = df.pivot(index="IDPEL", columns="THBLREK", values="JAMNYALA")
+            df_pivot_jam = df.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="first")
             st.dataframe(df_pivot_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
@@ -324,7 +329,7 @@ with tab_pasca:
     if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
 
-        thblrek_options = sorted(df["THBLREK"].unique())
+        thblrek_options = sorted(df["THBLREK"].dropna().unique())
         selected_thblrek = st.selectbox("Filter Bulan (THBLREK)", ["Semua"] + thblrek_options)
         if selected_thblrek != "Semua":
             df = df[df["THBLREK"] == selected_thblrek]
@@ -358,7 +363,7 @@ with tab_pasca:
         risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < min_jamnyala
         risk_df["min_kwh_zero"] = risk_df["min_kwh"] == 0
         risk_df["rendah_rata"] = risk_df["mean_kwh"] < min_kwh_mean
-        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > max_std  
+        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > max_std
 
         indikator_cols = [
             "pemakaian_zero_3x",
