@@ -282,8 +282,6 @@ with st.expander("📦 AMR", expanded=False):
 # ------------------ TABS LAIN ------------------ #
 tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
 
-tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
-
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
