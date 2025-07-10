@@ -458,14 +458,12 @@ with tab_pasca:
                 st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
                 df_idpel = filtered_df[filtered_df["IDPEL"] == selected_idpel].sort_values("THBLREK")
                 if not df_idpel.empty:
-                    # Validasi dan konversi THBLREK
-                    st.write("Nilai unik THBLREK untuk IDPEL:", df_idpel["THBLREK"].unique())
+                    st.write("Data df_idpel:", df_idpel)  # Tambahkan ini untuk inspeksi data
                     df_idpel["THBLREK"] = pd.to_datetime(df_idpel["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
                     invalid_dates = df_idpel[df_idpel["THBLREK"] == "NaT"]["THBLREK"]
                     if not invalid_dates.empty:
                         st.warning(f"Nilai THBLREK tidak valid untuk IDPEL {selected_idpel}: {invalid_dates.unique()}. Data ini diabaikan.")
                         df_idpel = df_idpel[df_idpel["THBLREK"] != "NaT"]
-                    # Pastikan PEMKWH numerik
                     df_idpel["PEMKWH"] = pd.to_numeric(df_idpel["PEMKWH"], errors="coerce")
                     if df_idpel["PEMKWH"].isna().all():
                         st.error("Kolom PEMKWH tidak mengandung data numerik yang valid.")
@@ -476,9 +474,9 @@ with tab_pasca:
                             y="PEMKWH",
                             title=f"Grafik Konsumsi KWH Bulanan - Pelanggan IDPEL: {selected_idpel}",
                             markers=True,
-                            text=df_idpel["PEMKWH"].round(1) if not df_idpel["PEMKWH"].isna().all() else None,
+                            text=df_idpel["PEMKWH"].round(1),
                             color_discrete_sequence=["#1E90FF"]
-                        )
+                        )            
                         fig_line.update_traces(textposition="top right")
                         fig_line.update_layout(
                             yaxis_title="PEMKWH",
@@ -487,7 +485,7 @@ with tab_pasca:
                             yaxis=dict(autorange=True)
                         )
                         st.plotly_chart(fig_line, use_container_width=True)
-                else:
-                    st.warning("Tidak ada data untuk IDPEL yang dipilih.")
+                    else:
+                        st.warning("Tidak ada data untuk IDPEL yang dipilih.")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
