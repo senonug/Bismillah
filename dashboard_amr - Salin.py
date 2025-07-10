@@ -80,9 +80,6 @@ def safe_pivot_table(df, index, columns, values):
             st.error(f"Gagal membuat pivot table: {e}")
             return pd.DataFrame()
 
-# ------------------ TABS ------------------ #
-tab2, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
-
 # ------------------ Tab AMR Harian ------------------ #
 tab2, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
 
