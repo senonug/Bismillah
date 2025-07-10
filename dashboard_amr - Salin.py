@@ -256,49 +256,52 @@ with tab2:
             st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
 
     # ------------------ Tab 2: Upload Data ------------------ #
-    with tab2:
-        uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
-        if uploaded_file:
-            try:
-                df = pd.read_excel(uploaded_file, sheet_name=0)
-                required_cols = ['LOCATION_CODE'] + [
-                    'CURRENT_L1', 'CURRENT_L2', 'CURRENT_L3',
-                    'VOLTAGE_L1', 'VOLTAGE_L2', 'VOLTAGE_L3',
-                    'ACTIVE_POWER_L1', 'ACTIVE_POWER_L2', 'ACTIVE_POWER_L3',
-                    'POWER_FACTOR_L1', 'POWER_FACTOR_L2', 'POWER_FACTOR_L3',
-                    'ACTIVE_POWER_SIANG', 'ACTIVE_POWER_MALAM', 'CURRENT_LOOP', 'FREEZE'
-                ]
-                if not set(required_cols).issubset(df.columns):
-                    st.error("File Excel tidak memiliki semua kolom yang diperlukan.")
-                    st.stop()
-                df = df.dropna(subset=['LOCATION_CODE'])
-                num_cols = [
-                    'CURRENT_L1', 'CURRENT_L2', 'CURRENT_L3',
-                    'VOLTAGE_L1', 'VOLTAGE_L2', 'VOLTAGE_L3',
-                    'ACTIVE_POWER_L1', 'ACTIVE_POWER_L2', 'ACTIVE_POWER_L3',
-                    'POWER_FACTOR_L1', 'POWER_FACTOR_L2', 'POWER_FACTOR_L3',
-                    'ACTIVE_POWER_SIANG', 'ACTIVE_POWER_MALAM', 'CURRENT_LOOP', 'FREEZE'
-                ]
-                for col in num_cols:
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-                if os.path.exists(data_path):
-                    df_hist = pd.read_csv(data_path)
-                    df = pd.concat([df_hist, df], ignore_index=True).drop_duplicates(subset=['LOCATION_CODE'], keep='last')
-                df.to_csv(data_path, index=False)
-                st.success("Data berhasil ditambahkan ke histori.")
-            except Exception as e:
-                st.error(f"Gagal memproses file: {e}")
+uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
+    if uploaded_file:
+        try:
+            st.write("Memproses file:", uploaded_file.name, "Ukuran:", uploaded_file.size / 1024 / 1024, "MB")
+            df = pd.read_excel(uploaded_file, sheet_name=0)
+            st.write("Kolom yang ditemukan:", list(df.columns))
+            required_cols = ['LOCATION_CODE'] + [
+                'CURRENT_L1', 'CURRENT_L2', 'CURRENT_L3',
+                'VOLTAGE_L1', 'VOLTAGE_L2', 'VOLTAGE_L3',
+                'ACTIVE_POWER_L1', 'ACTIVE_POWER_L2', 'ACTIVE_POWER_L3',
+                'POWER_FACTOR_L1', 'POWER_FACTOR_L2', 'POWER_FACTOR_L3',
+                'ACTIVE_POWER_SIANG', 'ACTIVE_POWER_MALAM', 'CURRENT_LOOP', 'FREEZE'
+            ]
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            if missing_cols:
+                st.error(f"Kolom yang hilang: {missing_cols}")
                 st.stop()
-
-        if st.button("🗑️ Hapus Semua Data Historis"):
+            df = df.dropna(subset=['LOCATION_CODE'])
+            num_cols = [
+                'CURRENT_L1', 'CURRENT_L2', 'CURRENT_L3',
+                'VOLTAGE_L1', 'VOLTAGE_L2', 'VOLTAGE_L3',
+                'ACTIVE_POWER_L1', 'ACTIVE_POWER_L2', 'ACTIVE_POWER_L3',
+                'POWER_FACTOR_L1', 'POWER_FACTOR_L2', 'POWER_FACTOR_L3',
+                'ACTIVE_POWER_SIANG', 'ACTIVE_POWER_MALAM', 'CURRENT_LOOP', 'FREEZE'
+            ]
+            for col in num_cols:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                    st.write(f"Kolom {col}: Data pertama = {df[col].iloc[0]}")
             if os.path.exists(data_path):
-                if st.checkbox("Konfirmasi penghapusan data historis"):
-                    os.remove(data_path)
-                    st.success("Data historis berhasil dihapus.")
-                else:
-                    st.warning("Centang kotak konfirmasi untuk menghapus data.")
+                df_hist = pd.read_csv(data_path)
+                df = pd.concat([df_hist, df], ignore_index=True).drop_duplicates(subset=['LOCATION_CODE'], keep='last')
+            df.to_csv(data_path, index=False)
+            st.success("Data berhasil ditambahkan ke histori.")
+        except Exception as e:
+            st.error(f"Gagal memproses file: {e}")
+            st.write("Detail error:", str(e))
+            st.stop()
 
+    if st.button("🗑️ Hapus Semua Data Historis"):
+        if os.path.exists(data_path):
+            if st.checkbox("Konfirmasi penghapusan data historis"):
+                os.remove(data_path)
+                st.success("Data historis berhasil dihapus.")
+            else:
+                st.warning("Centang kotak konfirmasi untuk menghapus data.")
 # ------------------ Tab Pascabayar ------------------ #
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
