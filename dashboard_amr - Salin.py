@@ -27,7 +27,6 @@ if not st.session_state["logged_in"]:
         st.markdown("<hr><div style='text-align:center; font-size:0.85rem;'>© 2025 PT PLN (Persero). All rights reserved.</div>", unsafe_allow_html=True)
     st.stop()
 
-
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
@@ -63,6 +62,7 @@ if st.button("🔒 Logout", key="logout_button", help="Keluar dari dashboard"):
     st.session_state["logged_in"] = False
     st.success("Logout berhasil!")
     st.rerun()
+
 # Definisi path file
 DATA_HARIAN_PATH = "amr_harian_histori.csv"
 OLAP_PASCABAYAR_PATH = "olap_pascabayar.csv"
@@ -226,7 +226,6 @@ with tab2:
         indikator['current_loop'] = row.get('CURRENT_LOOP', 0) == 1
         indikator['freeze'] = row.get('FREEZE', 0) == 1
         return indikator
-
 
     # ------------------ Navigasi ------------------ #
     tab1, tab2 = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
