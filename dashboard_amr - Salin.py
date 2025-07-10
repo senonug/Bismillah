@@ -84,8 +84,7 @@ def safe_pivot_table(df, index, columns, values):
 tab2, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
 
 # ------------------ Tab AMR Harian ------------------ #
-st.set_page_config(page_title="Dashboard TO AMR", layout="wide")
-with st.expander("📦 AMR", expanded=False):
+with tab2: 
     st.title("📊 Dashboard Target Operasi AMR - P2TL")
     st.markdown("---")
 
