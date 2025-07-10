@@ -458,34 +458,42 @@ with tab_pasca:
                 st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
                 df_idpel = filtered_df[filtered_df["IDPEL"] == selected_idpel].sort_values("THBLREK")
                 if not df_idpel.empty:
-                    st.write("Data df_idpel:", df_idpel)  # Tambahkan ini untuk inspeksi data
+                    # Validasi dan konversi THBLREK
+                    st.write("Data df_idpel sebelum konversi:", df_idpel[["THBLREK", "PEMKWH"]].to_dict())
                     df_idpel["THBLREK"] = pd.to_datetime(df_idpel["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
                     invalid_dates = df_idpel[df_idpel["THBLREK"] == "NaT"]["THBLREK"]
                     if not invalid_dates.empty:
                         st.warning(f"Nilai THBLREK tidak valid untuk IDPEL {selected_idpel}: {invalid_dates.unique()}. Data ini diabaikan.")
                         df_idpel = df_idpel[df_idpel["THBLREK"] != "NaT"]
+                    # Validasi PEMKWH
                     df_idpel["PEMKWH"] = pd.to_numeric(df_idpel["PEMKWH"], errors="coerce")
                     if df_idpel["PEMKWH"].isna().all():
                         st.error("Kolom PEMKWH tidak mengandung data numerik yang valid.")
                     else:
-                        fig_line = px.line(
-                            df_idpel,
-                            x="THBLREK",
-                            y="PEMKWH",
-                            title=f"Grafik Konsumsi KWH Bulanan - Pelanggan IDPEL: {selected_idpel}",
-                            markers=True,
-                            text=df_idpel["PEMKWH"].round(1),
-                            color_discrete_sequence=["#1E90FF"]
-                        )            
-                        fig_line.update_traces(textposition="top right")
-                        fig_line.update_layout(
-                            yaxis_title="PEMKWH",
-                            xaxis_title="Bulan Tahun",
-                            showlegend=False,
-                            yaxis=dict(autorange=True)
-                        )
-                        st.plotly_chart(fig_line, use_container_width=True)
+                        # Hapus baris dengan PEMKWH NaN
+                        df_idpel = df_idpel.dropna(subset=["PEMKWH"])
+                        if not df_idpel.empty:
+                            try:
+                                fig_line = px.line(
+                                    df_idpel,
+                                    x="THBLREK",
+                                    y="PEMKWH",
+                                    title=f"Grafik Konsumsi KWH Bulanan - Pelanggan IDPEL: {selected_idpel}",
+                                    markers=True,
+                                    color_discrete_sequence=["#1E90FF"]
+                                )
+                                fig_line.update_layout(
+                                    yaxis_title="PEMKWH",
+                                    xaxis_title="Bulan Tahun",
+                                    showlegend=False,
+                                    yaxis=dict(autorange=True)
+                                )
+                                st.plotly_chart(fig_line, use_container_width=True)
+                            except Exception as e:
+                                st.error(f"Gagal merender grafik: {e}. Periksa data atau format.")
+                        else:
+                            st.warning("Tidak ada data valid untuk IDPEL yang dipilih setelah pembersihan.")
                 else:
-                        st.warning("Tidak ada data untuk IDPEL yang dipilih.")
+                    st.warning("Tidak ada data untuk IDPEL yang dipilih.")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
