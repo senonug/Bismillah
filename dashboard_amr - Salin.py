@@ -64,8 +64,8 @@ if st.button("🔒 Logout", key="logout_button", help="Keluar dari dashboard"):
     st.success("Logout berhasil!")
     st.rerun()
 # Definisi path file
-data_path = "amr_harian_histori.csv"
-olap_path = "olap_pascabayar.csv"
+DATA_HARIAN_PATH = "amr_harian_histori.csv"
+OLAP_PASCABAYAR_PATH = "olap_pascabayar.csv"
 
 # ------------------ Fungsi Aman Pivot ------------------ #
 def safe_pivot_table(df, index, columns, values):
