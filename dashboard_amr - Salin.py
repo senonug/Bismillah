@@ -46,14 +46,23 @@ if not st.session_state['logged_in']:
     st.stop()
 
 # ------------------ Tombol Logout ------------------ #
-if st.button("🔒 Logout", key="logout_button"):
-    st.session_state["logged_in"] = False
-    st.rerun()
+st.markdown("""
+    <style>
+    .logout-button {
+        background-color: #f44336;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
     </style>
-    <form action="#" method="post">
-        <button class="logout-button" onclick="window.location.reload();">Logout</button>
-    </form>
 """, unsafe_allow_html=True)
+
+if st.button("🔒 Logout", key="logout_button", help="Keluar dari dashboard"):
+    st.session_state["logged_in"] = False
+    st.success("Logout berhasil!")
+    st.rerun()
 # Definisi path file
 data_path = "amr_harian_histori.csv"
 olap_path = "olap_pascabayar.csv"
