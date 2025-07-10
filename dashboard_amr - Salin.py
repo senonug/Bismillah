@@ -39,7 +39,14 @@ with tab2:
                 st.error("File Excel tidak memiliki semua kolom yang diperlukan.")
                 st.stop()
             df = df.dropna(subset=['LOCATION_CODE'])
-            for col in required_cols[1:]:
+            num_cols = [
+                'CURRENT_L1', 'CURRENT_L2', 'CURRENT_L3',
+                'VOLTAGE_L1', 'VOLTAGE_L2', 'VOLTAGE_L3',
+                'ACTIVE_POWER_L1', 'ACTIVE_POWER_L2', 'ACTIVE_POWER_L3',
+                'POWER_FACTOR_L1', 'POWER_FACTOR_L2', 'POWER_FACTOR_L3',
+                'ACTIVE_POWER_SIANG', 'ACTIVE_POWER_MALAM', 'CURRENT_LOOP', 'FREEZE'
+            ]
+            for col in num_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             if os.path.exists(data_path):
@@ -50,7 +57,7 @@ with tab2:
         except Exception as e:
             st.error(f"Gagal memproses file: {e}")
             st.stop()
-    
+
     if st.button("🗑️ Hapus Semua Data Historis"):
         if os.path.exists(data_path):
             if st.checkbox("Konfirmasi penghapusan data historis"):
@@ -153,21 +160,12 @@ with tab_pasca:
         st.metric("Pelanggan Berpotensi TO", len(df_to))
         st.dataframe(df_to.head(1000), use_container_width=True)
         fig_risk = px.histogram(df_to, x="skor", nbins=len(indikator_cols), title="Distribusi Skor Risiko Pelanggan Pascabayar")
-        fig_risk.update_layout(template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly")
         st.plotly_chart(fig_risk, use_container_width=True)
 
         if selected_idpel != "Semua":
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
             df_idpel = df[df["IDPEL"] == selected_idpel].sort_values("THBLREK")
-            fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Kons आरो
-
-umsi KWH Bulanan")
-            fig_line.update_layout(template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly")
+            fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
             st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
-
-# ------------------ Tab Prabayar ------------------ #
-with tab_prabayar:
-    st.title("📊 Dashboard Target Operasi Prabayar")
-    st.info("Fitur untuk data prabayar sedang dalam pengembangan.")
