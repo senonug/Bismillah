@@ -3,14 +3,12 @@ import pandas as pd
 import os
 import plotly.express as px
 
-# ------------------ Konfigurasi Halaman ------------------ #
+# ------------------ Login ------------------ #
 st.set_page_config(page_title="T-Energy", layout="centered", page_icon="⚡")
 
-# Inisialisasi session state untuk login
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
-# ------------------ Halaman Login ------------------ #
 if not st.session_state["logged_in"]:
     with st.container():
         st.markdown("<h1 style='text-align:center; color:#005aa7;'>T-Energy</h1>", unsafe_allow_html=True)
@@ -29,11 +27,43 @@ if not st.session_state["logged_in"]:
         st.markdown("<hr><div style='text-align:center; font-size:0.85rem;'>© 2025 PT PLN (Persero). All rights reserved.</div>", unsafe_allow_html=True)
     st.stop()
 
-# ------------------ Tombol Logout ------------------ #
-if st.button("🔒 Logout", key="logout_button"):
-    st.session_state["logged_in"] = False
-    st.rerun()
 
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+if not st.session_state['logged_in']:
+    with st.sidebar:
+        st.subheader("Login Pegawai")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if username == "admin" and password == "pln123":
+                st.session_state['logged_in'] = True
+                st.success("Login berhasil!")
+                st.rerun()
+            else:
+                st.error("Username/password salah")
+    st.stop()
+
+# ------------------ Tombol Logout ------------------ #
+st.markdown("""
+    <style>
+    .logout-button {
+        position: absolute;
+        top: 10px;
+        right: 16px;
+        background-color: #f44336;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    </style>
+    <form action="#" method="post">
+        <button class="logout-button" onclick="window.location.reload();">Logout</button>
+    </form>
+""", unsafe_allow_html=True)
 # Definisi path file
 data_path = "amr_harian_histori.csv"
 olap_path = "olap_pascabayar.csv"
@@ -50,13 +80,16 @@ def safe_pivot_table(df, index, columns, values):
             st.error(f"Gagal membuat pivot table: {e}")
             return pd.DataFrame()
 
-# ------------------ Tab Utama ------------------ #
+# ------------------ Tab AMR Harian ------------------ #
 tab2, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
 
 # ------------------ Tab AMR Harian ------------------ #
 with tab2: 
     st.title("📊 Dashboard Target Operasi AMR - P2TL")
     st.markdown("---")
+
+    # ------------------ Ambil semua parameter threshold dari session state ------------------ #
+    param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float, float))}
 
     # ------------------ Parameter Threshold Section ------------------ #
     with st.expander("⚙️ Setting Parameter"):
@@ -130,8 +163,9 @@ with tab2:
         st.number_input("Jumlah Bobot ≥", key="min_weight", value=2)
         st.number_input("Banyak Data yang Ditampilkan", key="top_limit", value=50)
 
-    # ------------------ Fungsi Cek Indikator ------------------ #
+    # ------------------ Fungsi Cek ------------------ #
     def cek_indikator(row):
+        # fungsi untuk mendeteksi anomali teknis pelanggan AMR
         indikator = {}
         indikator['arus_hilang'] = all([row['CURRENT_L1'] == 0, row['CURRENT_L2'] == 0, row['CURRENT_L3'] == 0])
         indikator['over_current'] = any([
@@ -194,14 +228,13 @@ with tab2:
         indikator['freeze'] = row.get('FREEZE', 0) == 1
         return indikator
 
-    # Ambil parameter threshold dari session state
-    param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float))}
 
-    # ------------------ Navigasi Tab ------------------ #
+    # ------------------ Navigasi ------------------ #
     tab1, tab2 = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
 
     # ------------------ Tab 1: Data Historis ------------------ #
     with tab1:
+        data_path = "data_harian.csv"
         if os.path.exists(data_path):
             df = pd.read_csv(data_path)
 
@@ -211,69 +244,37 @@ with tab2:
             indikator_list = df.apply(cek_indikator, axis=1)
             indikator_df = pd.DataFrame(indikator_list.tolist())
             indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
-            indikator_df['LOCATION_CODE'] = df['LOCATION_CODE']
 
             result = pd.concat([df[['LOCATION_CODE']], indikator_df], axis=1)
-            result['Jumlah Potensi TO'] = indikator_df.drop(columns=['Jumlah Berulang', 'LOCATION_CODE']).sum(axis=1)
+            result['Jumlah Potensi TO'] = indikator_df.drop(columns='Jumlah Berulang').sum(axis=1)
 
-            # Hilangkan duplikat LOCATION_CODE untuk metrik dan tabel
+            # Hilangkan duplikat LOCATION_CODE
             result_unique = result.drop_duplicates(subset='LOCATION_CODE')
-            potensi_to = result_unique[result_unique['Jumlah Potensi TO'] >= st.session_state.get('min_indicator', 1)]
+            top50 = result_unique.sort_values(by='Jumlah Potensi TO', ascending=False).head(50)
 
             col1, col2, col3 = st.columns(3)
             col1.metric("📄 Total Data", len(df))
-            col2.metric("🔢 Total IDPEL Unik", result_unique['LOCATION_CODE'].nunique())
-            col3.metric("🎯 Potensi Target Operasi", len(potensi_to))
+            col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
+            col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
 
-            st.subheader("🏆 Rekomendasi Target Operasi")
-            top_limit = st.session_state.get('top_limit', 50)
-            top_data = potensi_to.sort_values(by='Jumlah Potensi TO', ascending=False).head(top_limit)
-            st.dataframe(top_data, use_container_width=True)
-
-            # Tombol unduh semua data potensi TO
-            if not potensi_to.empty:
-                csv = potensi_to.to_csv(index=False)
-                st.download_button(
-                    label="📥 Unduh Semua Data Potensi TO",
-                    data=csv,
-                    file_name="potensi_to_amr_harian.csv",
-                    mime="text/csv"
-                )
+            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+            st.dataframe(top50, use_container_width=True)
 
             st.subheader("📈 Visualisasi Indikator Anomali")
-            indikator_counts = indikator_df.drop(columns=['Jumlah Berulang', 'LOCATION_CODE']).sum().sort_values(ascending=False).reset_index()
+            indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
             indikator_counts.columns = ['Indikator', 'Jumlah']
             fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
             st.plotly_chart(fig, use_container_width=True)
-
-            # Seleksi indikator untuk menampilkan IDPEL
-            selected_indikator = st.selectbox("Pilih Indikator untuk Melihat IDPEL", ["Semua"] + list(indikator_counts['Indikator']))
-            if selected_indikator != "Semua":
-                idpel_list = result_unique[result_unique[selected_indikator] == True][['LOCATION_CODE', 'Jumlah Berulang', 'Jumlah Potensi TO']]
-                st.subheader(f"IDPEL dengan Indikator {selected_indikator}")
-                st.dataframe(idpel_list, use_container_width=True)
         else:
             st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
 
     # ------------------ Tab 2: Upload Data ------------------ #
-uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
-    if uploaded_file:
-        try:
-            st.write("Memproses file:", uploaded_file.name, "Ukuran:", uploaded_file.size / 1024 / 1024, "MB")
+    with tab2:
+        uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
+        if uploaded_file:
             df = pd.read_excel(uploaded_file, sheet_name=0)
-            st.write("Kolom yang ditemukan:", list(df.columns))
-            required_cols = ['LOCATION_CODE'] + [
-                'CURRENT_L1', 'CURRENT_L2', 'CURRENT_L3',
-                'VOLTAGE_L1', 'VOLTAGE_L2', 'VOLTAGE_L3',
-                'ACTIVE_POWER_L1', 'ACTIVE_POWER_L2', 'ACTIVE_POWER_L3',
-                'POWER_FACTOR_L1', 'POWER_FACTOR_L2', 'POWER_FACTOR_L3',
-                'ACTIVE_POWER_SIANG', 'ACTIVE_POWER_MALAM', 'CURRENT_LOOP', 'FREEZE'
-            ]
-            missing_cols = [col for col in required_cols if col not in df.columns]
-            if missing_cols:
-                st.error(f"Kolom yang hilang: {missing_cols}")
-                st.stop()
             df = df.dropna(subset=['LOCATION_CODE'])
+
             num_cols = [
                 'CURRENT_L1', 'CURRENT_L2', 'CURRENT_L3',
                 'VOLTAGE_L1', 'VOLTAGE_L2', 'VOLTAGE_L3',
@@ -284,47 +285,24 @@ uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xls
             for col in num_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-                    st.write(f"Kolom {col}: Data pertama = {df[col].iloc[0]}")
+
             if os.path.exists(data_path):
                 df_hist = pd.read_csv(data_path)
-                df = pd.concat([df_hist, df], ignore_index=True).drop_duplicates(subset=['LOCATION_CODE'], keep='last')
+                df = pd.concat([df_hist, df], ignore_index=True).drop_duplicates()
             df.to_csv(data_path, index=False)
             st.success("Data berhasil ditambahkan ke histori.")
-        except Exception as e:
-            st.error(f"Gagal memproses file: {e}")
-            st.write("Detail error:", str(e))
-            st.stop()
 
-    if st.button("🗑️ Hapus Semua Data Historis"):
-        if os.path.exists(data_path):
-            if st.checkbox("Konfirmasi penghapusan data historis"):
+        if st.button("🗑️ Hapus Semua Data Historis"):
+            if os.path.exists(data_path):
                 os.remove(data_path)
                 st.success("Data historis berhasil dihapus.")
-            else:
-                st.warning("Centang kotak konfirmasi untuk menghapus data.")
+
 # ------------------ Tab Pascabayar ------------------ #
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
-
-    # ------------------ Setting Parameter ------------------ #
-    with st.expander("⚙️ Setting Parameter"):
-        st.markdown("""
-        Atur parameter untuk analisis risiko pelanggan pascabayar. Parameter ini menentukan kriteria untuk mendeteksi potensi target operasi (TO).
-        """)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("#### Kriteria Pemakaian")
-            st.number_input("Batas Minimum Pemakaian (kWh)", key="min_kwh", value=50.0, help="Pemakaian rata-rata di bawah nilai ini dianggap rendah.")
-            st.number_input("Batas Minimum Jam Nyala", key="min_jamnyala", value=50.0, help="Jam nyala rata-rata di bawah nilai ini dianggap abnormal.")
-            st.number_input("Jumlah Pemakaian Nol (Minimal)", key="min_zero_count", value=3, help="Jumlah bulan dengan pemakaian nol untuk dianggap bermasalah.")
-        with col2:
-            st.markdown("#### Kriteria Variasi")
-            st.number_input("Batas Variasi Pemakaian (kWh)", key="std_kwh_threshold", value=200.0, help="Standar deviasi pemakaian di atas nilai ini dianggap tinggi.")
-            st.number_input("Skor Risiko Minimal untuk TO", key="min_skor_to", value=3, help="Skor risiko minimum untuk mengklasifikasikan sebagai potensi TO.")
-
-    # ------------------ Upload File ------------------ #
     uploaded_file = st.file_uploader("📥 Upload File OLAP Pascabayar Bulanan", type=["xlsx"], key="pasca")
+
     if uploaded_file:
         try:
             df_new = pd.read_excel(uploaded_file)
@@ -360,14 +338,10 @@ with tab_pasca:
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
             df_pivot_kwh = safe_pivot_table(df, index="IDPEL", columns="THBLREK", values="PEMKWH")
-            df_pivot_kwh.index.name = "ID Pelanggan"
-            df_pivot_kwh.columns.name = "Bulan Rekening"
             st.dataframe(df_pivot_kwh, use_container_width=True)
 
         with st.expander("📁 Tabel JAMNYALA Bulanan"):
             df_pivot_jam = safe_pivot_table(df, index="IDPEL", columns="THBLREK", values="JAMNYALA")
-            df_pivot_jam.index.name = "ID Pelanggan"
-            df_pivot_jam.columns.name = "Bulan Rekening"
             st.dataframe(df_pivot_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
@@ -404,36 +378,25 @@ with tab_pasca:
             "variasi_tinggi"
         ]
 
-        risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= st.session_state.get('min_zero_count', 3)
-        risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < st.session_state.get('min_jamnyala', 50)
+        risk_df["pemakaian_zero_3x"] = risk_df["zero_count"] >= 3
+        risk_df["jamnyala_abnormal"] = risk_df["mean_jamnyala"] < 50
         risk_df["min_kwh_zero"] = risk_df["min_kwh"] == 0
-        risk_df["rendah_rata"] = risk_df["mean_kwh"] < st.session_state.get('min_kwh', 50)
-        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > st.session_state.get('std_kwh_threshold', 200)
+        risk_df["rendah_rata"] = risk_df["mean_kwh"] < 50
+        risk_df["variasi_tinggi"] = risk_df["std_kwh"] > 200
 
         risk_df["skor"] = risk_df[indikator_cols].sum(axis=1)
-        skor_threshold = st.session_state.get('min_skor_to', 3)
+        skor_threshold = st.slider("Minimal Skor Risiko untuk TO", 1, len(indikator_cols), 3)
         df_to = risk_df[risk_df["skor"] >= skor_threshold].sort_values("skor", ascending=False)
 
         st.metric("Pelanggan Berpotensi TO", len(df_to))
         st.dataframe(df_to.head(1000), use_container_width=True)
+        fig_risk = px.histogram(df_to, x="skor", nbins=len(indikator_cols), title="Distribusi Skor Risiko Pelanggan Pascabayar")
+        st.plotly_chart(fig_risk, use_container_width=True)
 
         if selected_idpel != "Semua":
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
             df_idpel = df[df["IDPEL"] == selected_idpel].sort_values("THBLREK")
-            col_graph, col_table = st.columns([2, 1])
-            with col_graph:
-                fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", 
-                                 title=f"Grafik Konsumsi KWH Bulanan - IDPEL {selected_idpel}",
-                                 labels={"THBLREK": "Bulan Rekening", "PEMKWH": "Konsumsi (kWh)"})
-                st.plotly_chart(fig_line, use_container_width=True)
-            with col_table:
-                st.markdown("**Tabel Konsumsi KWH Bulanan**")
-                df_idpel_display = df_idpel[["THBLREK", "PEMKWH"]].rename(columns={"THBLREK": "Bulan Rekening", "PEMKWH": "Konsumsi (kWh)"})
-                st.dataframe(df_idpel_display, use_container_width=True)
+            fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
+            st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
-
-# ------------------ Tab Prabayar ------------------ #
-with tab_prabayar:
-    st.title("📊 Dashboard Target Operasi Prabayar")
-    st.info("Fitur untuk data prabayar sedang dalam pengembangan.")
