@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import os
@@ -435,4 +434,3 @@ with tab_pasca:
 with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.info("Fitur untuk data prabayar sedang dalam pengembangan.")
-```
