@@ -432,25 +432,11 @@ with tab_pasca:
                     mime="text/csv",
                     key="download_to"
                 )
+
             if selected_idpel:
                 st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
                 df_idpel = filtered_df[filtered_df["IDPEL"] == selected_idpel].sort_values("THBLREK")
-                fig_line = px.line(
-                    df_idpel,
-                    x="THBLREK",
-                    y="PEMKWH",
-                    title=f"Grafik Konsumsi KWH Bulanan - Pelanggan IDPEL: {selected_idpel}",
-                    markers=True,
-                    text=df_idpel["PEMKWH"].round(1),
-                    color_discrete_sequence=["#1E90FF"]
-                )
-                fig_line.update_traces(textposition="top right")
-                fig_line.update_layout(
-                    yaxis=dict(range=[270, 330], tick0=270, dtick=10),
-                    xaxis_title="Bulan Tahun",
-                    yaxis_title="PEMKWH",
-                    showlegend=True
-                )
+                fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
                 st.plotly_chart(fig_line, use_container_width=True)
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
