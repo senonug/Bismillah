@@ -311,7 +311,22 @@ with tab_pasca:
                 st.stop()
             df_new = df_new[required_cols].dropna(subset=["IDPEL"])
             df_new["IDPEL"] = df_new["IDPEL"].astype(str)
+
+            # Validasi dan konversi THBLREK
+            st.write("Nilai unik THBLREK sebelum konversi:", df_new["THBLREK"].unique())
+            df_new["THBLREK"] = pd.to_datetime(df_new["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
+            invalid_dates = df_new[df_new["THBLREK"] == "NaT"]["THBLREK"]
+            if not invalid_dates.empty:
+                st.warning(f"Nilai THBLREK tidak valid ditemukan: {invalid_dates.unique()}. Data ini akan diabaikan.")
+                df_new = df_new[df_new["THBLREK"] != "NaT"]
+
             df_hist = pd.read_csv(OLAP_PASCABAYAR_PATH) if os.path.exists(OLAP_PASCABAYAR_PATH) else pd.DataFrame()
+            if not df_hist.empty:
+                df_hist["THBLREK"] = pd.to_datetime(df_hist["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
+                invalid_dates_hist = df_hist[df_hist["THBLREK"] == "NaT"]["THBLREK"]
+                if not invalid_dates_hist.empty:
+                    st.warning(f"Nilai THBLREK tidak valid di histori: {invalid_dates_hist.unique()}. Data ini akan diabaikan.")
+                    df_hist = df_hist[df_hist["THBLREK"] != "NaT"]
             df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"], keep="last")
             df_all.to_csv(OLAP_PASCABAYAR_PATH, index=False)
             st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
@@ -329,6 +344,12 @@ with tab_pasca:
     if os.path.exists(OLAP_PASCABAYAR_PATH):
         df = pd.read_csv(OLAP_PASCABAYAR_PATH)
         df["IDPEL"] = df["IDPEL"].astype(str)
+        # Validasi dan konversi THBLREK dari file historis
+        df["THBLREK"] = pd.to_datetime(df["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
+        invalid_dates = df[df["THBLREK"] == "NaT"]["THBLREK"]
+        if not invalid_dates.empty:
+            st.warning(f"Nilai THBLREK tidak valid di histori: {invalid_dates.unique()}. Data ini akan diabaikan.")
+            df = df[df["THBLREK"] != "NaT"]
         df = df.drop_duplicates(subset=["IDPEL", "THBLREK"], keep="last")
 
         if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
@@ -432,25 +453,41 @@ with tab_pasca:
                     mime="text/csv",
                     key="download_to"
                 )
+
             if selected_idpel:
                 st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
                 df_idpel = filtered_df[filtered_df["IDPEL"] == selected_idpel].sort_values("THBLREK")
-                fig_line = px.line(
-                    df_idpel,
-                    x="THBLREK",
-                    y="PEMKWH",
-                    title=f"Grafik Konsumsi KWH Bulanan - Pelanggan IDPEL: {selected_idpel}",
-                    markers=True,
-                    text=df_idpel["PEMKWH"].round(1),
-                    color_discrete_sequence=["#1E90FF"]
-                )
-                fig_line.update_traces(textposition="top right")
-                fig_line.update_layout(
-                    yaxis=dict(range=[270, 330], tick0=270, dtick=10),
-                    xaxis_title="Bulan Tahun",
-                    yaxis_title="PEMKWH",
-                    showlegend=True
-                )
-                st.plotly_chart(fig_line, use_container_width=True)
+                if not df_idpel.empty:
+                    # Validasi dan konversi THBLREK
+                    st.write("Nilai unik THBLREK untuk IDPEL:", df_idpel["THBLREK"].unique())
+                    df_idpel["THBLREK"] = pd.to_datetime(df_idpel["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
+                    invalid_dates = df_idpel[df_idpel["THBLREK"] == "NaT"]["THBLREK"]
+                    if not invalid_dates.empty:
+                        st.warning(f"Nilai THBLREK tidak valid untuk IDPEL {selected_idpel}: {invalid_dates.unique()}. Data ini diabaikan.")
+                        df_idpel = df_idpel[df_idpel["THBLREK"] != "NaT"]
+                    # Pastikan PEMKWH numerik
+                    df_idpel["PEMKWH"] = pd.to_numeric(df_idpel["PEMKWH"], errors="coerce")
+                    if df_idpel["PEMKWH"].isna().all():
+                        st.error("Kolom PEMKWH tidak mengandung data numerik yang valid.")
+                    else:
+                        fig_line = px.line(
+                            df_idpel,
+                            x="THBLREK",
+                            y="PEMKWH",
+                            title=f"Grafik Konsumsi KWH Bulanan - Pelanggan IDPEL: {selected_idpel}",
+                            markers=True,
+                            text=df_idpel["PEMKWH"].round(1) if not df_idpel["PEMKWH"].isna().all() else None,
+                            color_discrete_sequence=["#1E90FF"]
+                        )
+                        fig_line.update_traces(textposition="top right")
+                        fig_line.update_layout(
+                            yaxis_title="PEMKWH",
+                            xaxis_title="Bulan Tahun",
+                            showlegend=False,
+                            yaxis=dict(autorange=True)
+                        )
+                        st.plotly_chart(fig_line, use_container_width=True)
+                else:
+                    st.warning("Tidak ada data untuk IDPEL yang dipilih.")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
