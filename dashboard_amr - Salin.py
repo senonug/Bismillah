@@ -3,6 +3,67 @@ import pandas as pd
 import os
 import plotly.express as px
 
+# ------------------ Login ------------------ #
+st.set_page_config(page_title="T-Energy", layout="centered", page_icon="⚡")
+
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+
+if not st.session_state["logged_in"]:
+    with st.container():
+        st.markdown("<h1 style='text-align:center; color:#005aa7;'>T-Energy</h1>", unsafe_allow_html=True)
+        with st.form("login_form"):
+            st.subheader("Masuk ke Dashboard")
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("🔒 Sign In with IAM PLN")
+            if submitted:
+                if username == "admin" and password == "pln123":
+                    st.session_state["logged_in"] = True
+                    st.success("Login berhasil! Selamat datang di T-Energy.")
+                    st.rerun()
+                else:
+                    st.error("Username atau password salah")
+        st.markdown("<hr><div style='text-align:center; font-size:0.85rem;'>© 2025 PT PLN (Persero). All rights reserved.</div>", unsafe_allow_html=True)
+    st.stop()
+
+
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+if not st.session_state['logged_in']:
+    with st.sidebar:
+        st.subheader("Login Pegawai")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if username == "admin" and password == "pln123":
+                st.session_state['logged_in'] = True
+                st.success("Login berhasil!")
+                st.rerun()
+            else:
+                st.error("Username/password salah")
+    st.stop()
+
+# ------------------ Tombol Logout ------------------ #
+st.markdown("""
+    <style>
+    .logout-button {
+        position: absolute;
+        top: 10px;
+        right: 16px;
+        background-color: #f44336;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    </style>
+    <form action="#" method="post">
+        <button class="logout-button" onclick="window.location.reload();">Logout</button>
+    </form>
+""", unsafe_allow_html=True)
 # Definisi path file
 data_path = "amr_harian_histori.csv"
 olap_path = "olap_pascabayar.csv"
