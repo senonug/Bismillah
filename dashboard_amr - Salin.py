@@ -46,19 +46,9 @@ if not st.session_state['logged_in']:
     st.stop()
 
 # ------------------ Tombol Logout ------------------ #
-st.markdown("""
-    <style>
-    .logout-button {
-        position: absolute;
-        top: 10px;
-        right: 16px;
-        background-color: #f44336;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-    }
+if st.button("🔒 Logout", key="logout_button"):
+    st.session_state["logged_in"] = False
+    st.rerun()
     </style>
     <form action="#" method="post">
         <button class="logout-button" onclick="window.location.reload();">Logout</button>
