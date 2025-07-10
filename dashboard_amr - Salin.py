@@ -485,7 +485,7 @@ with tab_pasca:
                             yaxis=dict(autorange=True)
                         )
                         st.plotly_chart(fig_line, use_container_width=True)
-                    else:
+                else:
                         st.warning("Tidak ada data untuk IDPEL yang dipilih.")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
