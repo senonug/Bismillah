@@ -311,10 +311,22 @@ with tab_pasca:
                 st.stop()
             df_new = df_new[required_cols].dropna(subset=["IDPEL"])
             df_new["IDPEL"] = df_new["IDPEL"].astype(str)
-            df_new["THBLREK"] = pd.to_datetime(df_new["THBLREK"], format="%Y%m").dt.strftime("%b %Y")
+
+            # Validasi dan konversi THBLREK
+            st.write("Memeriksa nilai unik THBLREK sebelum konversi:", df_new["THBLREK"].unique())
+            df_new["THBLREK"] = pd.to_datetime(df_new["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
+            invalid_dates = df_new[df_new["THBLREK"] == "NaT"]["THBLREK"]
+            if not invalid_dates.empty:
+                st.warning(f"Nilai THBLREK tidak valid ditemukan: {invalid_dates.unique()}. Data ini akan diabaikan.")
+                df_new = df_new[df_new["THBLREK"] != "NaT"]
+
             df_hist = pd.read_csv(OLAP_PASCABAYAR_PATH) if os.path.exists(OLAP_PASCABAYAR_PATH) else pd.DataFrame()
             if not df_hist.empty:
-                df_hist["THBLREK"] = pd.to_datetime(df_hist["THBLREK"], format="%Y%m").dt.strftime("%b %Y")
+                df_hist["THBLREK"] = pd.to_datetime(df_hist["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
+                invalid_dates_hist = df_hist[df_hist["THBLREK"] == "NaT"]["THBLREK"]
+                if not invalid_dates_hist.empty:
+                    st.warning(f"Nilai THBLREK tidak valid di histori: {invalid_dates_hist.unique()}. Data ini akan diabaikan.")
+                    df_hist = df_hist[df_hist["THBLREK"] != "NaT"]
             df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"], keep="last")
             df_all.to_csv(OLAP_PASCABAYAR_PATH, index=False)
             st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
@@ -332,7 +344,12 @@ with tab_pasca:
     if os.path.exists(OLAP_PASCABAYAR_PATH):
         df = pd.read_csv(OLAP_PASCABAYAR_PATH)
         df["IDPEL"] = df["IDPEL"].astype(str)
-        df["THBLREK"] = pd.to_datetime(df["THBLREK"], format="%Y%m").dt.strftime("%b %Y") if df["THBLREK"].dtype == object else df["THBLREK"]
+        # Validasi dan konversi THBLREK dari file historis
+        df["THBLREK"] = pd.to_datetime(df["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
+        invalid_dates = df[df["THBLREK"] == "NaT"]["THBLREK"]
+        if not invalid_dates.empty:
+            st.warning(f"Nilai THBLREK tidak valid di histori: {invalid_dates.unique()}. Data ini akan diabaikan.")
+            df = df[df["THBLREK"] != "NaT"]
         df = df.drop_duplicates(subset=["IDPEL", "THBLREK"], keep="last")
 
         if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
@@ -433,7 +450,11 @@ with tab_pasca:
             df_idpel = filtered_df[filtered_df["IDPEL"] == selected_idpel].sort_values("THBLREK")
             if not df_idpel.empty:
                 # Konversi THBLREK ke format bulan jika belum
-                df_idpel["THBLREK"] = pd.to_datetime(df_idpel["THBLREK"], format="%b %Y", errors="coerce").dt.strftime("%b %Y")
+                df_idpel["THBLREK"] = pd.to_datetime(df_idpel["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
+                invalid_dates = df_idpel[df_idpel["THBLREK"] == "NaT"]["THBLREK"]
+                if not invalid_dates.empty:
+                    st.warning(f"Nilai THBLREK tidak valid untuk IDPEL {selected_idpel}: {invalid_dates.unique()}. Data ini diabaikan.")
+                    df_idpel = df_idpel[df_idpel["THBLREK"] != "NaT"]
                 fig_line = px.line(
                     df_idpel,
                     x="THBLREK",
