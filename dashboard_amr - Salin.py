@@ -323,12 +323,18 @@ with tab_pasca:
             ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
         )
 
+        # Filter dataframe berdasarkan selected_idpel
+        if selected_idpel != "Semua":
+            df_filtered = df[df["IDPEL"].astype(str) == selected_idpel]
+        else:
+            df_filtered = df
+
         with st.expander("📁 Tabel PEMKWH Bulanan"):
-            df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="mean")
+            df_pivot_kwh = df_filtered.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="mean")
             st.dataframe(df_pivot_kwh, use_container_width=True)
 
         with st.expander("📁 Tabel JAMNYALA Bulanan"):
-            df_pivot_jam = df.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="mean")
+            df_pivot_jam = df_filtered.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="mean")
             st.dataframe(df_pivot_jam, use_container_width=True)
 
     else:
