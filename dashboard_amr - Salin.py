@@ -286,7 +286,6 @@ with tab2:
                 st.success("Data historis berhasil dihapus.")
 
 with tab_pasca:
-with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
     olap_path = "olap_pascabayar.csv"
