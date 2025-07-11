@@ -221,40 +221,42 @@ with tab2:
     tab1, tab2 = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
 
     # ------------------ Tab 1: Data Historis ------------------ #
-    with tab1:
-        data_path = "data_harian.csv"
-        if os.path.exists(data_path):
-            df = pd.read_csv(data_path)
+with tab1:
+    data_path = "data_harian.csv"
+    if os.path.exists(data_path):
+        df = pd.read_csv(data_path)
 
-            # Tambahkan kolom jumlah kemunculan LOCATION_CODE
-            df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
+        # Tambahkan kolom jumlah kemunculan LOCATION_CODE
+        df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
 
-            indikator_list = df.apply(cek_indikator, axis=1)
-            indikator_df = pd.DataFrame(indikator_list.tolist())
-            indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
+        indikator_list = df.apply(cek_indikator, axis=1)
+        indikator_df = pd.DataFrame(indikator_list.tolist())
+        indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
 
-            result = pd.concat([df[['LOCATION_CODE']], indikator_df], axis=1)
-            result['Jumlah Potensi TO'] = indikator_df.drop(columns='Jumlah Berulang').sum(axis=1)
+        result = pd.concat([df[['LOCATION_CODE']], indikator_df], axis=1)
+        result['Jumlah Potensi TO'] = indikator_df.drop(columns='Jumlah Berulang').sum(axis=1)
 
-            # Hilangkan duplikat LOCATION_CODE
-            result_unique = result.drop_duplicates(subset='LOCATION_CODE')
-            top50 = result_unique.sort_values(by='Jumlah Potensi TO', ascending=False).head(50)
+        # Hilangkan duplikat LOCATION_CODE dan pastikan total unik sesuai 10.930
+        result_unique = result.drop_duplicates(subset='LOCATION_CODE')
+        if len(result_unique) != 10930:
+            st.warning("Perhatian: Jumlah IDPEL unik tidak sesuai dengan 10.930, mohon periksa data.")
+        top50 = result_unique.sort_values(by='Jumlah Potensi TO', ascending=False).head(50)
 
-            col1, col2, col3 = st.columns(3)
-            col1.metric("📄 Total Data", len(df))
-            col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
-            col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
+        col1, col2, col3 = st.columns(3)
+        col1.metric("📄 Total Data", len(df))
+        col2.metric("🔢 Total IDPEL Unik", 10930)  # Tetap set ke 10.930 sesuai permintaan
+        col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
 
-            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
-            st.dataframe(top50, use_container_width=True)
+        st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+        st.dataframe(top50[['LOCATION_CODE', 'Jumlah Berulang', 'arus_hilang', 'over_current', 'over_voltage', 'v_drop', 'cos_phi_kecil', 'active_power_negative']], use_container_width=True)
 
-            st.subheader("📈 Visualisasi Indikator Anomali")
-            indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
-            indikator_counts.columns = ['Indikator', 'Jumlah']
-            fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
+        st.subheader("📈 Visualisasi Indikator Anomali")
+        indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
+        indikator_counts.columns = ['Indikator', 'Jumlah']
+        fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
 
     # ------------------ Tab 2: Upload Data ------------------ #
     with tab2:
