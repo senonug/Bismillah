@@ -49,9 +49,6 @@ if not st.session_state['logged_in']:
 st.markdown("""
     <style>
     .logout-button {
-        position: absolute;
-        top: 10px;
-        right: 16px;
         background-color: #f44336;
         color: white;
         border: none;
@@ -60,17 +57,26 @@ st.markdown("""
         cursor: pointer;
     }
     </style>
-    <form action="#" method="post">
-        <button class="logout-button" onclick="window.location.reload();">Logout</button>
-    </form>
 """, unsafe_allow_html=True)
 
+if st.button("🔒 Logout", key="logout_button", help="Keluar dari dashboard"):
+    st.session_state["logged_in"] = False
+    st.success("Logout berhasil!")
+    st.rerun()
 
-# ------------------ Setup ------------------ #
-st.set_page_config(page_title="Dashboard TO AMR", layout="wide")
-with st.expander("📦 AMR", expanded=False):
+
+# ------------------ Tab AMR Harian ------------------ #
+tab2, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
+
+# ------------------ Tab AMR Harian ------------------ #
+with tab2: 
     st.title("📊 Dashboard Target Operasi AMR - P2TL")
     st.markdown("---")
+
+    # ------------------ Ambil semua parameter threshold dari session state ------------------ #
+    param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float, float))}
+
+    # ------------------ Parameter Threshold Section ------------------ #
 
     # ------------------ Ambil semua parameter threshold dari session state ------------------ #
     param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float, float))}
