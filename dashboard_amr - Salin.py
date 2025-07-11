@@ -343,7 +343,6 @@ with tab_pasca:
             if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
                 st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data akan dirata-ratakan.")
 
-            # Pindahkan Pilih IDPEL ke atas tabel
             selected_idpel = st.selectbox(
                 "🔍 Pilih IDPEL untuk Tabel & Grafik",
                 ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
