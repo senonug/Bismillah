@@ -285,9 +285,6 @@ with tab2:
                 os.remove(data_path)
                 st.success("Data historis berhasil dihapus.")
 
-# ------------------ TABS LAIN ------------------ #
-tab_pasca, tab_prabayar = st.tabs(["💳 Pascabayar", "💡 Prabayar"])
-
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
