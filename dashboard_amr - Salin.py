@@ -223,7 +223,7 @@ with tab2:
     # ------------------ Tab 1: Data Historis ------------------ # 
     with tab1:
    		 data_path = "data_harian.csv"
-    		if os.path.exists(data_path):
+    	 if os.path.exists(data_path):
        			 df = pd.read_csv(data_path)
 
         		# Hitung jumlah kemunculan LOCATION_CODE dan tambahkan sebagai kolom
