@@ -311,21 +311,21 @@ with tab_pasca:
             df_new = df_new[required_cols].dropna(subset=["IDPEL"])
             df_new["IDPEL"] = df_new["IDPEL"].astype(str)
 
-            # Validasi dan konversi THBLREK
-            st.write("Nilai unik THBLREK sebelum konversi:", df_new["THBLREK"].unique())
-            df_new["THBLREK"] = pd.to_datetime(df_new["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
-            invalid_dates = df_new[df_new["THBLREK"] == "NaT"]["THBLREK"]
-            if not invalid_dates.empty:
-                st.warning(f"Nilai THBLREK tidak valid ditemukan: {invalid_dates.unique()}. Data ini akan diabaikan.")
-                df_new = df_new[df_new["THBLREK"] != "NaT"]
+            # Konversi THBLREK
+            def convert_thblrek(value):
+                try:
+                    return pd.to_datetime("1899-12-30") + pd.to_timedelta(value, unit="D")
+                except:
+                    return pd.to_datetime(str(value), format="%Y%m", errors="coerce")
+                return pd.NaT
+
+            df_new["THBLREK"] = df_new["THBLREK"].apply(convert_thblrek).dt.strftime("%b %Y")
+            df_new = df_new.dropna(subset=["THBLREK"])
 
             df_hist = pd.read_csv(OLAP_PASCABAYAR_PATH) if os.path.exists(OLAP_PASCABAYAR_PATH) else pd.DataFrame()
             if not df_hist.empty:
-                df_hist["THBLREK"] = pd.to_datetime(df_hist["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
-                invalid_dates_hist = df_hist[df_hist["THBLREK"] == "NaT"]["THBLREK"]
-                if not invalid_dates_hist.empty:
-                    st.warning(f"Nilai THBLREK tidak valid di histori: {invalid_dates_hist.unique()}. Data ini akan diabaikan.")
-                    df_hist = df_hist[df_hist["THBLREK"] != "NaT"]
+                df_hist["THBLREK"] = df_hist["THBLREK"].apply(convert_thblrek).dt.strftime("%b %Y")
+                df_hist = df_hist.dropna(subset=["THBLREK"])
             df_all = pd.concat([df_hist, df_new]).drop_duplicates(subset=["THBLREK", "IDPEL"], keep="last")
             df_all.to_csv(OLAP_PASCABAYAR_PATH, index=False)
             st.success("Data berhasil ditambahkan ke histori OLAP Pascabayar.")
@@ -333,35 +333,22 @@ with tab_pasca:
             st.error(f"Gagal memproses file: {e}")
             st.stop()
 
-    if st.button("🗑 Hapus Histori OLAP Pascabayar"):
-        if os.path.exists(OLAP_PASCABAYAR_PATH):
-            os.remove(OLAP_PASCABAYAR_PATH)
-            st.success("Histori OLAP berhasil dihapus.")
-        else:
-            st.info("Tidak ada histori untuk dihapus.")
-
     if os.path.exists(OLAP_PASCABAYAR_PATH):
         df = pd.read_csv(OLAP_PASCABAYAR_PATH)
         df["IDPEL"] = df["IDPEL"].astype(str)
-        # Validasi dan konversi THBLREK dari file historis
-        df["THBLREK"] = pd.to_datetime(df["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
-        invalid_dates = df[df["THBLREK"] == "NaT"]["THBLREK"]
-        if not invalid_dates.empty:
-            st.warning(f"Nilai THBLREK tidak valid di histori: {invalid_dates.unique()}. Data ini akan diabaikan.")
-            df = df[df["THBLREK"] != "NaT"]
+        df["THBLREK"] = df["THBLREK"].apply(convert_thblrek).dt.strftime("%b %Y")
+        df = df.dropna(subset=["THBLREK"])
         df = df.drop_duplicates(subset=["IDPEL", "THBLREK"], keep="last")
 
         if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
             st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data telah dibersihkan.")
 
-        # Informasi Data OLAP
         st.subheader("📋 Informasi Data OLAP")
         col1, col2, col3 = st.columns(3)
         col1.metric("Jumlah Bulan", df["THBLREK"].nunique())
         col2.metric("Jumlah Pelanggan Unik", df["IDPEL"].nunique())
         col3.metric("Total Entri", len(df))
 
-        # Filter Lanjutan
         st.subheader("🔍 Filter Data")
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -378,12 +365,20 @@ with tab_pasca:
         filtered_df = filtered_df[filtered_df["PEMKWH"].between(*pemkwh_range)]
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
-            df_pivot_kwh = safe_pivot_table(filtered_df, index="IDPEL", columns="THBLREK", values="PEMKWH")
-            st.dataframe(df_pivot_kwh, use_container_width=True)
+            if filtered_df.empty:
+                st.warning("Tidak ada data yang sesuai dengan filter untuk tabel PEMKWH Bulanan.")
+            else:
+                df_pivot_kwh = safe_pivot_table(filtered_df, index="IDPEL", columns="THBLREK", values="PEMKWH")
+                df_pivot_kwh = df_pivot_kwh.fillna(0)
+                st.dataframe(df_pivot_kwh, use_container_width=True)
 
         with st.expander("📁 Tabel JAMNYALA Bulanan"):
-            df_pivot_jam = safe_pivot_table(filtered_df, index="IDPEL", columns="THBLREK", values="JAMNYALA")
-            st.dataframe(df_pivot_jam, use_container_width=True)
+            if filtered_df.empty:
+                st.warning("Tidak ada data yang sesuai dengan filter untuk tabel JAMNYALA Bulanan.")
+            else:
+                df_pivot_jam = safe_pivot_table(filtered_df, index="IDPEL", columns="THBLREK", values="JAMNYALA")
+                df_pivot_jam = df_pivot_jam.fillna(0)
+                st.dataframe(df_pivot_jam, use_container_width=True)
 
         if not filtered_df.empty:
             st.subheader("🎯 Rekomendasi Target Operasi")
@@ -423,10 +418,9 @@ with tab_pasca:
             skor_threshold = st.slider("Minimal Skor Risiko untuk TO", 1, len(indikator_cols), 3, key="skor_threshold")
             df_to = risk_df[risk_df["skor"] >= skor_threshold].sort_values("skor", ascending=False)
 
-            # Peringatan jika data kurang dari 3 bulan
             min_months = 3
             if risk_df["count_months"].min() < min_months:
-                st.warning(f"Beberapa pelanggan memiliki data kurang dari {min_months} bulan, yang dapat memengaruhi akurasi skor risiko.")
+                st.warning(f"Beberapa pelanggan memiliki data kurang dari {min_months} bulan, yang dapat memengaruhi akurasi skor.")
 
             st.metric("Pelanggan Berpotensi TO", len(df_to))
             st.dataframe(
@@ -442,7 +436,6 @@ with tab_pasca:
                 }
             )
 
-            # Tombol Ekspor
             if not df_to.empty:
                 csv = df_to[["IDPEL", "nama", "alamat"] + indikator_cols + ["skor"]].to_csv(index=False)
                 st.download_button(
@@ -457,41 +450,28 @@ with tab_pasca:
                 st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
                 df_idpel = filtered_df[filtered_df["IDPEL"] == selected_idpel].sort_values("THBLREK")
                 if not df_idpel.empty:
-                    # Validasi dan konversi THBLREK
                     st.write("Data df_idpel sebelum konversi:", df_idpel[["THBLREK", "PEMKWH"]].to_dict())
-                    df_idpel["THBLREK"] = pd.to_datetime(df_idpel["THBLREK"], format="%Y%m", errors="coerce").dt.strftime("%b %Y")
-                    invalid_dates = df_idpel[df_idpel["THBLREK"] == "NaT"]["THBLREK"]
-                    if not invalid_dates.empty:
-                        st.warning(f"Nilai THBLREK tidak valid untuk IDPEL {selected_idpel}: {invalid_dates.unique()}. Data ini diabaikan.")
-                        df_idpel = df_idpel[df_idpel["THBLREK"] != "NaT"]
-                    # Validasi PEMKWH
+                    df_idpel["THBLREK"] = df_idpel["THBLREK"].apply(convert_thblrek).dt.strftime("%b %Y")
                     df_idpel["PEMKWH"] = pd.to_numeric(df_idpel["PEMKWH"], errors="coerce")
-                    if df_idpel["PEMKWH"].isna().all():
-                        st.error("Kolom PEMKWH tidak mengandung data numerik yang valid.")
+                    df_idpel = df_idpel.dropna(subset=["THBLREK", "PEMKWH"])
+                    if len(df_idpel) > 1:
+                        fig_line = px.line(
+                            df_idpel,
+                            x="THBLREK",
+                            y="PEMKWH",
+                            title=f"Grafik Konsumsi KWH Bulanan - Pelanggan IDPEL: {selected_idpel}",
+                            markers=True,
+                            color_discrete_sequence=["#1E90FF"]
+                        )
+                        fig_line.update_layout(
+                            yaxis_title="PEMKWH",
+                            xaxis_title="Bulan Tahun",
+                            showlegend=False,
+                            yaxis=dict(autorange=True)
+                        )
+                        st.plotly_chart(fig_line, use_container_width=True)
                     else:
-                        # Hapus baris dengan PEMKWH NaN
-                        df_idpel = df_idpel.dropna(subset=["PEMKWH"])
-                        if not df_idpel.empty:
-                            try:
-                                fig_line = px.line(
-                                    df_idpel,
-                                    x="THBLREK",
-                                    y="PEMKWH",
-                                    title=f"Grafik Konsumsi KWH Bulanan - Pelanggan IDPEL: {selected_idpel}",
-                                    markers=True,
-                                    color_discrete_sequence=["#1E90FF"]
-                                )
-                                fig_line.update_layout(
-                                    yaxis_title="PEMKWH",
-                                    xaxis_title="Bulan Tahun",
-                                    showlegend=False,
-                                    yaxis=dict(autorange=True)
-                                )
-                                st.plotly_chart(fig_line, use_container_width=True)
-                            except Exception as e:
-                                st.error(f"Gagal merender grafik: {e}. Periksa data atau format.")
-                        else:
-                            st.warning("Tidak ada data valid untuk IDPEL yang dipilih setelah pembersihan.")
+                        st.warning("Data tidak cukup untuk menampilkan grafik. Minimal 2 bulan data diperlukan.")
                 else:
                     st.warning("Tidak ada data untuk IDPEL yang dipilih.")
     else:
