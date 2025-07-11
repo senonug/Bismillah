@@ -341,8 +341,20 @@ with tab_pasca:
         if selected_idpel != "Semua":
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
             df_idpel = df[df["IDPEL"].astype(str) == selected_idpel].sort_values("THBLREK")
-            fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
-            st.plotly_chart(fig_line, use_container_width=True)
+            # Tangani data kosong atau hilang
+            df_idpel = df_idpel.dropna(subset=["THBLREK", "PEMKWH"])
+            if df_idpel.empty:
+                st.warning("Tidak ada data konsumsi untuk IDPEL yang dipilih.")
+            else:
+                # Perbaiki format tanggal
+                df_idpel["THBLREK"] = pd.to_datetime(df_idpel["THBLREK"], format="%Y%m").dt.strftime("%b %Y")
+                # Tambahkan rata-rata bergerak
+                df_idpel["Moving_Avg"] = df_idpel["PEMKWH"].rolling(window=3, min_periods=1).mean()
+                # Tambahkan label dan skala yang jelas
+                fig_line = px.line(df_idpel, x="THBLREK", y=["PEMKWH", "Moving_Avg"], title="Grafik Konsumsi KWH Bulanan",
+                                  labels={"THBLREK": "Bulan", "value": "Konsumsi kWh (kWh)", "variable": "Metrik"},
+                                  hover_data=["NAMA", "ALAMAT"])
+                st.plotly_chart(fig_line, use_container_width=True)
 
         st.subheader("🎯 Rekomendasi Target Operasi")
 
