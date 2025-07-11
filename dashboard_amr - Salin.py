@@ -318,16 +318,28 @@ with tab_pasca:
         if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
             st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data akan dirata-ratakan.")
 
+        # Tambahkan parameter indikator penurunan
+        drop_threshold = st.number_input("Penurunan Pemakaian kWh 3 Bulan Terakhir (%)", value=30, min_value=0, max_value=100, step=1)
+
         selected_idpel = st.selectbox(
             "🔍 Pilih IDPEL untuk Tabel & Grafik",
             ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
         )
 
-        # Filter dataframe berdasarkan selected_idpel
+        # Filter dataframe berdasarkan selected_idpel dan penurunan kWh
         if selected_idpel != "Semua":
-            df_filtered = df[df["IDPEL"].astype(str) == selected_idpel]
+            df_filtered = df[df["IDPEL"].astype(str) == selected_idpel].copy()
+            # Hitung penurunan kWh 3 bulan terakhir
+            if len(df_filtered) >= 3:
+                df_filtered = df_filtered.sort_values("THBLREK", ascending=False)
+                recent_3 = df_filtered.head(3)["PEMKWH"].mean()
+                previous = df_filtered.tail(len(df_filtered)-3)["PEMKWH"].mean() if len(df_filtered) > 3 else df_filtered["PEMKWH"].mean()
+                if previous > 0:
+                    drop_percent = ((previous - recent_3) / previous) * 100
+                    if drop_percent < drop_threshold:
+                        df_filtered = pd.DataFrame()  # Kosongkan jika penurunan < threshold
         else:
-            df_filtered = df
+            df_filtered = df.copy()
 
         with st.expander("📁 Tabel PEMKWH Bulanan"):
             df_pivot_kwh = df_filtered.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="mean")
@@ -338,7 +350,7 @@ with tab_pasca:
             st.dataframe(df_pivot_jam, use_container_width=True)
 
         # Riwayat Konsumsi dan Grafik Konsumsi KWH Bulanan
-        if selected_idpel != "Semua":
+        if selected_idpel != "Semua" and len(df_filtered) == 1:
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
             df_idpel = df[df["IDPEL"].astype(str) == selected_idpel].sort_values("THBLREK")
             # Tangani data kosong atau hilang
