@@ -285,6 +285,7 @@ with tab2:
                 os.remove(data_path)
                 st.success("Data historis berhasil dihapus.")
 
+# ------------------ Tab Pascabayar ------------------ #
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
@@ -315,16 +316,41 @@ with tab_pasca:
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
 
-        if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
-            st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data akan dirata-ratakan.")
+        # Tambahkan filter di sidebar
+        with st.sidebar:
+            st.subheader("Filter Data Pascabayar")
+            selected_gardu = st.multiselect(
+                "Pilih Gardu",
+                options=sorted(df["NAMAGARDU"].unique()),
+                default=sorted(df["NAMAGARDU"].unique()),
+                key="filter_gardu_pasca"
+            )
+            selected_tarif = st.multiselect(
+                "Pilih Tarif",
+                options=sorted(df["TARIF"].unique()),
+                default=sorted(df["TARIF"].unique()),
+                key="filter_tarif_pasca"
+            )
 
-        with st.expander("📁 Tabel PEMKWH Bulanan"):
-            df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="mean")
-            st.dataframe(df_pivot_kwh, use_container_width=True)
+        # Terapkan filter
+        if selected_gardu:
+            df = df[df["NAMAGARDU"].isin(selected_gardu)]
+        if selected_tarif:
+            df = df[df["TARIF"].isin(selected_tarif)]
 
-        with st.expander("📁 Tabel JAMNYALA Bulanan"):
-            df_pivot_jam = df.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="mean")
-            st.dataframe(df_pivot_jam, use_container_width=True)
+        if df.empty:
+            st.warning("Tidak ada data yang sesuai dengan filter yang dipilih.")
+        else:
+            if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
+                st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data akan dirata-ratakan.")
+
+            with st.expander("📁 Tabel PEMKWH Bulanan"):
+                df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="mean")
+                st.dataframe(df_pivot_kwh, use_container_width=True)
+
+            with st.expander("📁 Tabel JAMNYALA Bulanan"):
+                df_pivot_jam = df.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="mean")
+                st.dataframe(df_pivot_jam, use_container_width=True)
     else:
         df = pd.DataFrame()
 
@@ -391,8 +417,7 @@ with tab_pasca:
             fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
             st.plotly_chart(fig_line, use_container_width=True)
     else:
-        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
-with tab_prabayar:
+        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
     uploaded_file = st.file_uploader("📥 Upload File Excel Prabayar", type=["xlsx"], key="prabayar")
