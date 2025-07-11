@@ -318,6 +318,10 @@ with tab_pasca:
         if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
             st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data akan dirata-ratakan.")
 
+	selected_idpel = st.selectbox(
+            "🔍 Pilih IDPEL untuk Tabel & Grafik",
+            ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
+        )
         with st.expander("📁 Tabel PEMKWH Bulanan"):
             df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="mean")
             st.dataframe(df_pivot_kwh, use_container_width=True)
@@ -330,16 +334,6 @@ with tab_pasca:
 
     if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
-
-        thblrek_options = sorted(df["THBLREK"].dropna().unique())
-        selected_thblrek = st.selectbox("Filter Bulan (THBLREK)", ["Semua"] + thblrek_options)
-        if selected_thblrek != "Semua":
-            df = df[df["THBLREK"] == selected_thblrek]
-
-        selected_idpel = st.selectbox(
-            "🔍 Pilih IDPEL untuk Tabel & Grafik",
-            ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
-        )
 
         with st.expander("⚙️ Parameter Indikator Risiko (Opsional)"):
             min_jamnyala = st.number_input("Jam Nyala Minimum", value=50)
