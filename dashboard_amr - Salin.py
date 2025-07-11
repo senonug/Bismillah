@@ -27,7 +27,6 @@ if not st.session_state["logged_in"]:
         st.markdown("<hr><div style='text-align:center; font-size:0.85rem;'>© 2025 PT PLN (Persero). All rights reserved.</div>", unsafe_allow_html=True)
     st.stop()
 
-
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
@@ -56,6 +55,20 @@ st.markdown("""
         border-radius: 6px;
         cursor: pointer;
     }
+    .yes-indicator {
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 4px;
+        padding: 2px 6px;
+        text-align: center;
+    }
+    .no-indicator {
+        background-color: #9E9E9E;
+        color: white;
+        border-radius: 4px;
+        padding: 2px 6px;
+        text-align: center;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -63,7 +76,6 @@ if st.button("🔒 Logout", key="logout_button", help="Keluar dari dashboard"):
     st.session_state["logged_in"] = False
     st.success("Logout berhasil!")
     st.rerun()
-
 
 # ------------------ Tab AMR Harian ------------------ #
 tab2, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
@@ -74,12 +86,7 @@ with tab2:
     st.markdown("---")
 
     # ------------------ Ambil semua parameter threshold dari session state ------------------ #
-    param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float, float))}
-
-    # ------------------ Parameter Threshold Section ------------------ #
-
-    # ------------------ Ambil semua parameter threshold dari session state ------------------ #
-    param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float, float))}
+    param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float))}
 
     # ------------------ Parameter Threshold Section ------------------ #
     with st.expander("⚙️ Setting Parameter"):
@@ -155,7 +162,6 @@ with tab2:
 
     # ------------------ Fungsi Cek ------------------ #
     def cek_indikator(row):
-        # fungsi untuk mendeteksi anomali teknis pelanggan AMR
         indikator = {}
         indikator['arus_hilang'] = all([row['CURRENT_L1'] == 0, row['CURRENT_L2'] == 0, row['CURRENT_L3'] == 0])
         indikator['over_current'] = any([
@@ -179,44 +185,22 @@ with tab2:
             for i in range(1, 4)
         ])
         indikator['arus_kecil_teg_kecil'] = all([
-            all([
-                row['CURRENT_L1'] < 1,
-                row['CURRENT_L2'] < 1,
-                row['CURRENT_L3'] < 1
-            ]),
-            all([
-                row['VOLTAGE_L1'] < 180,
-                row['VOLTAGE_L2'] < 180,
-                row['VOLTAGE_L3'] < 180
-            ]),
-            any([
-                row.get(f'ACTIVE_POWER_L{i}', 0) > 10
-                for i in range(1, 4)
-            ])
+            all([row['CURRENT_L1'] < 1, row['CURRENT_L2'] < 1, row['CURRENT_L3'] < 1]),
+            all([row['VOLTAGE_L1'] < 180, row['VOLTAGE_L2'] < 180, row['VOLTAGE_L3'] < 180]),
+            any([row.get(f'ACTIVE_POWER_L{i}', 0) > 10 for i in range(1, 4)])
         ])
         arus = [row['CURRENT_L1'], row['CURRENT_L2'], row['CURRENT_L3']]
         max_i, min_i = max(arus), min(arus)
         indikator['unbalance_I'] = (max_i - min_i) / max_i > param.get('unbal_tol_tm', 0.5) if max_i > 0 else False
-        indikator['v_lost'] = (
-            row.get('VOLTAGE_L1', 0) == 0 or
-            row.get('VOLTAGE_L2', 0) == 0 or
-            row.get('VOLTAGE_L3', 0) == 0
-        )
-        indikator['In_more_Imax'] = any([
-            row['CURRENT_L1'] > param.get('max_i_tm', 1.0),
-            row['CURRENT_L2'] > param.get('max_i_tm', 1.0),
-            row['CURRENT_L3'] > param.get('max_i_tm', 1.0)
-        ])
+        indikator['v_lost'] = (row.get('VOLTAGE_L1', 0) == 0 or row.get('VOLTAGE_L2', 0) == 0 or row.get('VOLTAGE_L3', 0) == 0)
+        indikator['In_more_Imax'] = any([row['CURRENT_L1'] > param.get('max_i_tm', 1.0), row['CURRENT_L2'] > param.get('max_i_tm', 1.0), row['CURRENT_L3'] > param.get('max_i_tm', 1.0)])
         indikator['active_power_negative_siang'] = row.get('ACTIVE_POWER_SIANG', 0) < 0
         indikator['active_power_negative_malam'] = row.get('ACTIVE_POWER_MALAM', 0) < 0
-        indikator['active_p_lost'] = (
-            row.get('ACTIVE_POWER_L1', 0) == 0 and
-            row.get('ACTIVE_POWER_L2', 0) == 0 and
-            row.get('ACTIVE_POWER_L3', 0) == 0
-        )
+        indikator['active_p_lost'] = (row.get('ACTIVE_POWER_L1', 0) == 0 and row.get('ACTIVE_POWER_L2', 0) == 0 and row.get('ACTIVE_POWER_L3', 0) == 0)
         indikator['current_loop'] = row.get('CURRENT_LOOP', 0) == 1
         indikator['freeze'] = row.get('FREEZE', 0) == 1
         return indikator
+
     # ------------------ Navigasi ------------------ #
     tab1, tab2 = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
 
@@ -240,13 +224,25 @@ with tab2:
             result_unique = result.drop_duplicates(subset='LOCATION_CODE')
             top50 = result_unique.sort_values(by='Jumlah Potensi TO', ascending=False).head(50)
 
+            # Opsi untuk memilih kolom yang ditampilkan
+            default_cols = ['LOCATION_CODE', 'arus_hilang', 'over_current', 'over_voltage', 'v_drop', 'cos_phi_kecil', 'active_power_negative']
+            selected_cols = st.multiselect("Pilih kolom yang ditampilkan", options=result_unique.columns, default=default_cols)
+
+            # Format tabel dengan warna untuk indikator
+            def highlight_indicators(val):
+                if isinstance(val, bool):
+                    return 'yes-indicator' if val else 'no-indicator'
+                return ''
+
+            styled_top50 = top50[selected_cols].style.applymap(highlight_indicators, subset=[col for col in selected_cols if col != 'LOCATION_CODE'])
+
             col1, col2, col3 = st.columns(3)
             col1.metric("📄 Total Data", len(df))
             col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
             col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
 
             st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
-            st.dataframe(top50, use_container_width=True)
+            st.dataframe(styled_top50, use_container_width=True)
 
             st.subheader("📈 Visualisasi Indikator Anomali")
             indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
