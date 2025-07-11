@@ -381,8 +381,6 @@ with tab_pasca:
 
         st.metric("Pelanggan Berpotensi TO", len(df_to))
         st.dataframe(df_to.head(1000), use_container_width=True)
-        fig_risk = px.histogram(df_to, x="skor", nbins=len(indikator_cols), title="Distribusi Skor Risiko Pelanggan Pascabayar")
-        st.plotly_chart(fig_risk, use_container_width=True)
         st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
 
         if selected_idpel != "Semua":
