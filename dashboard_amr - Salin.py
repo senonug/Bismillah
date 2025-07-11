@@ -311,11 +311,11 @@ with tab_pasca:
             if st.confirm("Apakah Anda yakin ingin menghapus seluruh histori OLAP Pascabayar?"):
                 os.remove(olap_path)
                 st.success("Histori OLAP berhasil dihapus.")
-	selected_idpel = st.selectbox(
+
+        selected_idpel = st.selectbox(
             "🔍 Pilih IDPEL untuk Tabel & Grafik",
             ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
         )
-
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
 
@@ -339,11 +339,6 @@ with tab_pasca:
         thblrek_summary.columns = ["Bulan (THBLREK)", "Jumlah Pelanggan Unik"]
         st.subheader("Data Terunggah")
         st.dataframe(thblrek_summary, use_container_width=True)
-
-        selected_idpel = st.selectbox(
-            "🔍 Pilih IDPEL untuk Tabel & Grafik",
-            ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
-        )
 
         with st.expander("⚙️ Parameter Indikator Risiko (Opsional)"):
             min_jamnyala = st.number_input("Jam Nyala Minimum", value=50)
