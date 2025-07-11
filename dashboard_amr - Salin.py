@@ -318,9 +318,10 @@ with tab_pasca:
         if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
             st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data akan dirata-ratakan.")
 
-        # Tambahkan parameter indikator penurunan dengan checkbox
-        use_drop_threshold = st.checkbox("Gunakan Penurunan Pemakaian kWh 3 Bulan Terakhir", value=True)
-        drop_threshold = st.number_input("Penurunan Pemakaian kWh 3 Bulan Terakhir (%)", value=30, min_value=0, max_value=100, step=1, disabled=not use_drop_threshold)
+        # Input nilai penurunan terlebih dahulu
+        drop_threshold = st.number_input("Penurunan Pemakaian kWh 3 Bulan Terakhir (%)", value=30, min_value=0, max_value=100, step=1)
+        # Checkbox untuk mengaktifkan filter
+        use_drop_threshold = st.checkbox("Aktifkan Filter Penurunan Pemakaian kWh", value=False)
 
         selected_idpel = st.selectbox(
             "🔍 Pilih IDPEL untuk Tabel & Grafik",
@@ -420,6 +421,7 @@ with tab_pasca:
 
     else:
         df = pd.DataFrame()
+        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
 with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
