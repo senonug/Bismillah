@@ -286,6 +286,7 @@ with tab2:
                 st.success("Data historis berhasil dihapus.")
 
 with tab_pasca:
+with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
     olap_path = "olap_pascabayar.csv"
@@ -337,10 +338,13 @@ with tab_pasca:
             df_pivot_jam = df_filtered.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="mean")
             st.dataframe(df_pivot_jam, use_container_width=True)
 
-    else:
-        df = pd.DataFrame()
+        # Riwayat Konsumsi dan Grafik Konsumsi KWH Bulanan
+        if selected_idpel != "Semua":
+            st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
+            df_idpel = df[df["IDPEL"].astype(str) == selected_idpel].sort_values("THBLREK")
+            fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
+            st.plotly_chart(fig_line, use_container_width=True)
 
-    if not df.empty:
         st.subheader("🎯 Rekomendasi Target Operasi")
 
         with st.expander("⚙️ Parameter Indikator Risiko (Opsional)"):
@@ -385,12 +389,8 @@ with tab_pasca:
         st.dataframe(df_to.head(1000), use_container_width=True)
         st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
 
-        if selected_idpel != "Semua":
-            st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
-            df_idpel = df[df["IDPEL"].astype(str) == selected_idpel].sort_values("THBLREK")
-            fig_line = px.line(df_idpel, x="THBLREK", y="PEMKWH", title="Grafik Konsumsi KWH Bulanan")
-            st.plotly_chart(fig_line, use_container_width=True)
     else:
+        df = pd.DataFrame()
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
 with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
