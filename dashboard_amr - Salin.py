@@ -336,12 +336,12 @@ with tab_pasca:
                 previous = df_temp.tail(len(df_temp)-3)["PEMKWH"].mean() if len(df_temp) > 3 else df_temp["PEMKWH"].mean()
                 if previous > 0:
                     drop_percent = ((previous - recent_3) / previous) * 100
-                    if drop_percent >= drop_threshold:  # Hanya tampilkan jika penurunan >= threshold
-                        df_filtered = df_temp
+                    if drop_percent < drop_threshold:  # Kosongkan jika penurunan < threshold
+                        df_filtered = pd.DataFrame()
                     else:
-                        df_filtered = pd.DataFrame()  # Kosongkan jika penurunan < threshold
+                        df_filtered = df_temp
                 else:
-                    df_filtered = df_temp  # Jika previous = 0, tampilkan semua data
+                    df_filtered = df_temp  # Jika previous = 0, tampilkan semua
             else:
                 df_filtered = df_temp  # Jika tidak menggunakan threshold atau data < 3 bulan
         else:
@@ -420,7 +420,6 @@ with tab_pasca:
 
     else:
         df = pd.DataFrame()
-        st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
 with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
