@@ -317,11 +317,12 @@ with tab_pasca:
 
         if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
             st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data akan dirata-ratakan.")
-           	 
-	selected_idpel = st.selectbox(
+
+        selected_idpel = st.selectbox(
             "🔍 Pilih IDPEL untuk Tabel & Grafik",
             ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
-          	  )
+        )
+
         with st.expander("📁 Tabel PEMKWH Bulanan"):
             df_pivot_kwh = df.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="mean")
             st.dataframe(df_pivot_kwh, use_container_width=True)
@@ -329,6 +330,7 @@ with tab_pasca:
         with st.expander("📁 Tabel JAMNYALA Bulanan"):
             df_pivot_jam = df.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="mean")
             st.dataframe(df_pivot_jam, use_container_width=True)
+
     else:
         df = pd.DataFrame()
 
