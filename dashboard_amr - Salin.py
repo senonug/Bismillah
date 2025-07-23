@@ -230,7 +230,7 @@ with tab2:
             
         proses_analisis = st.checkbox("✅ Jalankan analisis berdasarkan threshold di atas", key="proses_analisis")
 
-            if proses_analisis:
+    if proses_analisis:
 
                 df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
 
