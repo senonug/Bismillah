@@ -87,8 +87,8 @@ with tab2:
         Operasi Logika yang digunakan di sini adalah **OR**. Dengan demikian, indikator yang sesuai dengan salah satu spesifikasi aturan tersebut akan di-highlight berwarna hijau cerah dan berkontribusi pada perhitungan potensi TO.
         """)
 
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
+        colA, colB = st.columns(2)
+        with colA:
             st.markdown("#### Tegangan Drop")
             st.number_input("Set Batas Atas Tegangan Menengah (tm)", key="v_tm_max", value=56.0)
             st.number_input("Set Batas Atas Tegangan Rendah (tr)", key="v_tr_max", value=180.0)
@@ -105,7 +105,7 @@ with tab2:
             st.number_input("Set Batas Bawah Arus Reverse Power TM", key="reverse_i_tm", value=0.5)
             st.number_input("Set Batas Bawah Arus Reverse Power TR", key="reverse_i_tr", value=0.7)
 
-        with col2:
+        with colA:
             st.markdown("#### Tegangan Hilang")
             st.number_input("Nilai Tegangan Menengah Hilang (tm)", key="v_tm_zero", value=0.0)
             st.number_input("Nilai Tegangan Rendah Hilang (tr)", key="v_tr_zero", value=0.0)
@@ -121,7 +121,7 @@ with tab2:
             st.markdown("#### Active Power Lost")
             st.number_input("Set Batas Bawah Arus P Lost", key="plost_i_min", value=0.5)
 
-        with col3:
+        with colB:
             st.markdown("#### Cos Phi Kecil")
             st.number_input("Cos Phi Max TM", key="cos_phi_tm", value=0.4)
             st.number_input("Cos Phi Max TR", key="cos_phi_tr", value=0.4)
@@ -132,7 +132,7 @@ with tab2:
             st.number_input("Set Selisih Tegangan TM", key="low_v_diff_tm", value=2.0)
             st.number_input("Set Selisih Tegangan TR", key="low_v_diff_tr", value=8.0)
 
-        with col4:
+        with colB:
             st.markdown("#### Arus Hilang")
             st.number_input("Set Batas Arus Hilang pada TM", key="loss_i_tm", value=0.02)
             st.number_input("Set Batas Arus Hilang pada TR", key="loss_i_tr", value=0.02)
@@ -240,7 +240,7 @@ with tab2:
             result_unique = result.drop_duplicates(subset='LOCATION_CODE')
             top50 = result_unique.sort_values(by='Jumlah Potensi TO', ascending=False).head(50)
 
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3 = st.columns([1.2, 1.2, 1])
             col1.metric("📄 Total Data", len(df))
             col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
             col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
