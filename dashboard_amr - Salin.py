@@ -231,6 +231,7 @@ with tab2:
 
             indikator_list = df.apply(cek_indikator, axis=1)
             indikator_df = pd.DataFrame(indikator_list.tolist())
+            indikator_df['LOCATION_CODE'] = df['LOCATION_CODE'].values
             indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
 
             # Tambahkan kolom pelanggan jika tidak ada
@@ -336,7 +337,6 @@ with tab2:
         if st.button("🗑️ Hapus Semua Data Historis"):
             if os.path.exists(data_path):
                 os.remove(data_path)
-                st.success("Data historis berhasil dihapus.")
 
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
