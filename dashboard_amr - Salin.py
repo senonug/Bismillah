@@ -279,7 +279,7 @@ with tab2:
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
-: Upload Data ------------------ #
+# ------------------ Upload Data ------------------  ------------------ #
     with tab2:
         uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
         if uploaded_file:
