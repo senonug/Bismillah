@@ -275,7 +275,12 @@ with tab2:
             )
 
 
-            result = pd.merge(indikator_df.reset_index(drop=True), df_info, on='LOCATION_CODE', how='left'), indikator_df.reset_index(drop=True), axis=1
+            result = pd.merge(
+                indikator_df.reset_index(drop=True),
+                df_info,
+                on='LOCATION_CODE',
+                how='left'
+            )
 
             top50 = result.sort_values(by='Skor', ascending=False).head(50)
 
