@@ -220,30 +220,20 @@ with tab2:
     # ------------------ Navigasi ------------------ #
     tab1, tab2 = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
 
-    # ------------------ Tab 1: Data Historis ------------------ #
+    
+# ------------------ Tab 1: Data Historis ------------------ #
     with tab1:
         data_path = "data_harian.csv"
         if os.path.exists(data_path):
             df = pd.read_csv(data_path)
 
-            # Tambahkan kolom jumlah kemunculan LOCATION_CODE
             df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
 
             indikator_list = df.apply(cek_indikator, axis=1)
             indikator_df = pd.DataFrame(indikator_list.tolist())
             indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
 
-            result = pd.concat([df[['LOCATION_CODE']], indikator_df], axis=1)
-            result['Jumlah Potensi TO'] = indikator_df.drop(columns='Jumlah Berulang').sum(axis=1)
-
-            # Hilangkan duplikat LOCATION_CODE
-            result_unique = result.drop_duplicates(subset='LOCATION_CODE')
-            # (Dihapus: blok lama top50, diganti oleh versi skor + indikator)
-
-            col1, col2, col3 = st.columns([1.2, 1.2, 1])
-            
-            
-            # Tambahkan kolom info pelanggan jika tidak ada
+            # Tambahkan kolom pelanggan jika tidak ada
             for col in ['NAMA', 'ALAMAT', 'TARIF', 'DAYA']:
                 if col not in df.columns:
                     df[col] = "-"
@@ -259,30 +249,29 @@ with tab2:
             indikator_df['Jumlah Indikator'] = indikator_df.sum(axis=1)
             indikator_df['Skor'] = indikator_df.apply(lambda row: sum(indikator_bobot.get(col, 1) for col in indikator_bobot if row[col]), axis=1)
 
-            df_merge = df[['LOCATION_CODE', 'NAMA', 'ALAMAT', 'TARIF', 'DAYA']].copy() if all(col in df.columns for col in ['NAMA','ALAMAT','TARIF','DAYA']) else df[['LOCATION_CODE']].copy()
+            df_merge = df[['LOCATION_CODE', 'NAMA', 'ALAMAT', 'TARIF', 'DAYA']].copy()
             result = pd.concat([df_merge.reset_index(drop=True), indikator_df.reset_index(drop=True)], axis=1)
 
-                        filtered = result.copy()
-            top50 = filtered.sort_values(by='Skor', ascending=False).head(50)
+            top50 = result.sort_values(by='Skor', ascending=False).head(50)
 
             col1, col2, col3 = st.columns([1.2, 1.2, 1])
             col1.metric("📄 Total Data", len(df))
-                        col3.metric("🎯 Pelanggan Skor ≥ " "N/A", len(filtered))
+                        col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
 
-                        
+            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+
             st.download_button(
                 label="📥 Download Hasil Lengkap (Excel)",
-                data=filtered.to_csv(index=False).encode('utf-8'),
+                data=result.to_csv(index=False).encode('utf-8'),
                 file_name="hasil_target_operasi_amr.csv",
                 mime="text/csv"
             )
 
-
-            st.dataframe(top50[['LOCATION_CODE', 'NAMA', 'ALAMAT', 'TARIF', 'DAYA'] + list(indikator_bobot.keys()) + ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']], use_container_width=True, height=550)
-
-                        
-            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
-            # [Dihapus] dataframe lama
+            st.dataframe(
+                top50[['LOCATION_CODE', 'NAMA', 'ALAMAT', 'TARIF', 'DAYA'] + list(indikator_bobot.keys()) + ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']],
+                use_container_width=True,
+                height=600
+            )
 
             st.subheader("📈 Visualisasi Indikator Anomali")
             indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
@@ -291,8 +280,7 @@ with tab2:
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
-
-    # ------------------ Tab 2: Upload Data ------------------ #
+: Upload Data ------------------ #
     with tab2:
         uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
         if uploaded_file:
