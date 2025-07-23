@@ -262,21 +262,27 @@ with tab2:
             df_merge = df[['LOCATION_CODE', 'NAMA', 'ALAMAT', 'TARIF', 'DAYA']].copy() if all(col in df.columns for col in ['NAMA','ALAMAT','TARIF','DAYA']) else df[['LOCATION_CODE']].copy()
             result = pd.concat([df_merge.reset_index(drop=True), indikator_df.reset_index(drop=True)], axis=1)
 
-            min_skor = st.slider("🎚️ Filter Minimal Skor TO", min_value=1, max_value=int(result['Skor'].max()), value=2)
-
-            filtered = result[result["Skor"] >= min_skor]
+                        filtered = result.copy()
             top50 = filtered.sort_values(by='Skor', ascending=False).head(50)
 
             col1, col2, col3 = st.columns([1.2, 1.2, 1])
             col1.metric("📄 Total Data", len(df))
-            col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
-            col3.metric("🎯 Pelanggan Skor ≥ " + str(min_skor), len(filtered))
+                        col3.metric("🎯 Pelanggan Skor ≥ " "N/A", len(filtered))
 
-            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+                        
+            st.download_button(
+                label="📥 Download Hasil Lengkap (Excel)",
+                data=filtered.to_csv(index=False).encode('utf-8'),
+                file_name="hasil_target_operasi_amr.csv",
+                mime="text/csv"
+            )
+
+
             st.dataframe(top50[['LOCATION_CODE', 'NAMA', 'ALAMAT', 'TARIF', 'DAYA'] + list(indikator_bobot.keys()) + ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']], use_container_width=True, height=550)
 
-            col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
-            col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
+                        
+            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+            # [Dihapus] dataframe lama
 
             st.subheader("📈 Visualisasi Indikator Anomali")
             indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
