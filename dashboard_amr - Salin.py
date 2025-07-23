@@ -4,7 +4,7 @@ import os
 import plotly.express as px
 
 # ------------------ Login ------------------ #
-st.set_page_config(page_title="T-Energy", layout="centered", page_icon="⚡")
+st.set_page_config(page_title="T-Energy", layout="wide", page_icon="⚡")
 
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
