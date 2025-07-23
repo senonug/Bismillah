@@ -260,7 +260,8 @@ with tab2:
             )
 
 
-            indikator_df['Jumlah Indikator'] = indikator_df.sum(axis=1)
+            kolom_indikator = list(indikator_bobot.keys())
+            indikator_df['Jumlah Indikator'] = indikator_df[kolom_indikator].sum(axis=1)
             indikator_df['Skor'] = indikator_df.apply(lambda row: sum(indikator_bobot.get(col, 1) for col in indikator_bobot if row[col]), axis=1)
 
             # Pastikan LOCATION_CODE bertipe string dan bersih
