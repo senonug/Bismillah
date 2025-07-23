@@ -231,6 +231,7 @@ with tab2:
 
             indikator_list = df.apply(cek_indikator, axis=1)
             indikator_df = pd.DataFrame(indikator_list.tolist())
+            indikator_df['LOCATION_CODE'] = df['LOCATION_CODE'].values
             indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
 
             # Tambahkan kolom pelanggan jika tidak ada
@@ -262,8 +263,31 @@ with tab2:
             indikator_df['Jumlah Indikator'] = indikator_df.sum(axis=1)
             indikator_df['Skor'] = indikator_df.apply(lambda row: sum(indikator_bobot.get(col, 1) for col in indikator_bobot if row[col]), axis=1)
 
-            df_merge = df_info[['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA']].copy()
-            result = pd.concat([df_merge.reset_index(drop=True), indikator_df.reset_index(drop=True)], axis=1)
+            # Pastikan LOCATION_CODE bertipe string dan bersih
+            df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
+            indikator_df['LOCATION_CODE'] = df['LOCATION_CODE'].values
+            df_info['LOCATION_CODE'] = df_info['LOCATION_CODE'].astype(str).str.strip()
+
+
+            
+            # Ambil info pelanggan dari data terbaru per LOCATION_CODE
+            if 'TANGGAL' in df.columns:
+                df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
+                df_info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
+            else:
+                df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
+
+            df_info = df_info[['LOCATION_CODE', 'NAMA_PELANGGAN', 'TARIFF', 'POWER']].rename(
+                columns={'NAMA_PELANGGAN': 'NAMA', 'TARIFF': 'TARIF', 'POWER': 'DAYA'}
+            )
+
+
+            result = pd.merge(
+                indikator_df.reset_index(drop=True),
+                df_info,
+                on='LOCATION_CODE',
+                how='left'
+            )
 
             top50 = result.sort_values(by='Skor', ascending=False).head(50)
 
