@@ -280,7 +280,7 @@ with tab2:
             )
 
             st.dataframe(
-                top50[['LOCATION_CODE', 'NAMA', 'ALAMAT', 'TARIF', 'DAYA'] + list(indikator_bobot.keys()) + ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']],
+                top50[['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA'] + list(indikator_bobot.keys()) + ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']],
                 use_container_width=True,
                 height=600
             )
