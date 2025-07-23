@@ -227,31 +227,36 @@ with tab2:
         if os.path.exists(data_path):
             df = pd.read_csv(data_path)
 
-            df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
+            
+        proses_analisis = st.checkbox("✅ Jalankan analisis berdasarkan threshold di atas", key="proses_analisis")
 
-            indikator_list = df.apply(cek_indikator, axis=1)
-            indikator_df = pd.DataFrame(indikator_list.tolist())
-            indikator_df['LOCATION_CODE'] = df['LOCATION_CODE'].values
-            indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
+            if proses_analisis:
 
-            # Tambahkan kolom pelanggan jika tidak ada
-            for col in ['NAMA', 'ALAMAT', 'TARIF', 'DAYA']:
-                if col not in df.columns:
-                    df[col] = "-"
+                df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
 
-            indikator_bobot = {
-                'arus_hilang': 2, 'over_current': 1, 'over_voltage': 1, 'v_drop': 1,
-                'cos_phi_kecil': 1, 'active_power_negative': 2, 'arus_kecil_teg_kecil': 1,
-                'unbalance_I': 1, 'v_lost': 2, 'In_more_Imax': 1,
-                'active_power_negative_siang': 2, 'active_power_negative_malam': 2,
-                'active_p_lost': 2, 'current_loop': 2, 'freeze': 2
-            }
+                indikator_list = df.apply(cek_indikator, axis=1)
+                indikator_df = pd.DataFrame(indikator_list.tolist())
+                indikator_df['LOCATION_CODE'] = df['LOCATION_CODE'].values
+                indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
+
+                # Tambahkan kolom pelanggan jika tidak ada
+                for col in ['NAMA', 'ALAMAT', 'TARIF', 'DAYA']:
+                    if col not in df.columns:
+                        df[col] = "-"
+
+                indikator_bobot = {
+                    'arus_hilang': 2, 'over_current': 1, 'over_voltage': 1, 'v_drop': 1,
+                    'cos_phi_kecil': 1, 'active_power_negative': 2, 'arus_kecil_teg_kecil': 1,
+                    'unbalance_I': 1, 'v_lost': 2, 'In_more_Imax': 1,
+                    'active_power_negative_siang': 2, 'active_power_negative_malam': 2,
+                    'active_p_lost': 2, 'current_loop': 2, 'freeze': 2
+                }
 
             
-            # Ambil info pelanggan dari data terbaru per LOCATION_CODE
-            if 'TANGGAL' in df.columns:
-                df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
-                df_info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
+                # Ambil info pelanggan dari data terbaru per LOCATION_CODE
+                if 'TANGGAL' in df.columns:
+                    df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
+                    df_info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
             else:
                 df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
 
