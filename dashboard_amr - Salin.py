@@ -241,7 +241,34 @@ with tab2:
             top50 = result_unique.sort_values(by='Jumlah Potensi TO', ascending=False).head(50)
 
             col1, col2, col3 = st.columns([1.2, 1.2, 1])
+            
+            indikator_bobot = {
+                'arus_hilang': 2, 'over_current': 1, 'over_voltage': 1, 'v_drop': 1,
+                'cos_phi_kecil': 1, 'active_power_negative': 2, 'arus_kecil_teg_kecil': 1,
+                'unbalance_I': 1, 'v_lost': 2, 'In_more_Imax': 1,
+                'active_power_negative_siang': 2, 'active_power_negative_malam': 2,
+                'active_p_lost': 2, 'current_loop': 2, 'freeze': 2
+            }
+
+            indikator_df['Jumlah Indikator'] = indikator_df.sum(axis=1)
+            indikator_df['Skor'] = indikator_df.apply(lambda row: sum(indikator_bobot.get(col, 1) for col in indikator_bobot if row[col]), axis=1)
+
+            df_merge = df[['LOCATION_CODE', 'NAMA', 'ALAMAT', 'TARIF', 'DAYA']].copy() if all(col in df.columns for col in ['NAMA','ALAMAT','TARIF','DAYA']) else df[['LOCATION_CODE']].copy()
+            result = pd.concat([df_merge.reset_index(drop=True), indikator_df.reset_index(drop=True)], axis=1)
+
+            min_skor = st.slider("🎚️ Filter Minimal Skor TO", min_value=1, max_value=int(result['Skor'].max()), value=2)
+
+            filtered = result[result["Skor"] >= min_skor]
+            top50 = filtered.sort_values(by='Skor', ascending=False).head(50)
+
+            col1, col2, col3 = st.columns([1.2, 1.2, 1])
             col1.metric("📄 Total Data", len(df))
+            col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
+            col3.metric("🎯 Pelanggan Skor ≥ " + str(min_skor), len(filtered))
+
+            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+            st.dataframe(top50, use_container_width=True, height=550)
+
             col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
             col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
 
