@@ -278,9 +278,6 @@ with tab2:
             col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
             col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
 
-            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
-            # [Dihapus] dataframe lama
-
             st.subheader("📈 Visualisasi Indikator Anomali")
             indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
             indikator_counts.columns = ['Indikator', 'Jumlah']
