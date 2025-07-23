@@ -311,7 +311,8 @@ with tab2:
             )
 
             st.subheader("📈 Visualisasi Indikator Anomali")
-            indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
+            kolom_indikator = list(indikator_bobot.keys())
+            indikator_counts = indikator_df[kolom_indikator].sum().sort_values(ascending=False).reset_index()
             indikator_counts.columns = ['Indikator', 'Jumlah']
             fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
             st.plotly_chart(fig, use_container_width=True)
