@@ -238,10 +238,16 @@ with tab2:
 
             # Hilangkan duplikat LOCATION_CODE
             result_unique = result.drop_duplicates(subset='LOCATION_CODE')
-            top50 = result_unique.sort_values(by='Jumlah Potensi TO', ascending=False).head(50)
+            # (Dihapus: blok lama top50, diganti oleh versi skor + indikator)
 
             col1, col2, col3 = st.columns([1.2, 1.2, 1])
             
+            
+            # Tambahkan kolom info pelanggan jika tidak ada
+            for col in ['NAMA', 'ALAMAT', 'TARIF', 'DAYA']:
+                if col not in df.columns:
+                    df[col] = "-"
+
             indikator_bobot = {
                 'arus_hilang': 2, 'over_current': 1, 'over_voltage': 1, 'v_drop': 1,
                 'cos_phi_kecil': 1, 'active_power_negative': 2, 'arus_kecil_teg_kecil': 1,
@@ -266,13 +272,13 @@ with tab2:
             col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
             col3.metric("🎯 Pelanggan Skor ≥ " + str(min_skor), len(filtered))
 
-            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
-            st.dataframe(top50, use_container_width=True, height=550)
+            # st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+            st.dataframe(top50[['LOCATION_CODE', 'NAMA', 'ALAMAT', 'TARIF', 'DAYA'] + list(indikator_bobot.keys()) + ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']], use_container_width=True, height=550)
 
             col2.metric("🔢 Total IDPEL Unik", df['LOCATION_CODE'].nunique())
             col3.metric("🎯 Potensi Target Operasi", sum(result_unique['Jumlah Potensi TO'] > 0))
 
-            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+            # st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
             st.dataframe(top50, use_container_width=True)
 
             st.subheader("📈 Visualisasi Indikator Anomali")
