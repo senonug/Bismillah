@@ -225,107 +225,100 @@ with tab2:
     with tab1:
         data_path = "data_harian.csv"
         if os.path.exists(data_path):
-    w    i    proses_analisis = st.checkbox("✅ Jalankan analisis berdasarkan threshold di atas", key="proses_analisis")
-    w    if proses_analisis:
-    w    df = pd.read_csv(data_path)
-    
-                
-            proses_analisis = st.checkbox("✅ Jalankan analisis berdasarkan threshold di atas", key="proses_analisis")
-    
-            if proses_analisis:
-    
+            df = pd.read_csv(data_path)
+
             df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
-    
+
             indikator_list = df.apply(cek_indikator, axis=1)
             indikator_df = pd.DataFrame(indikator_list.tolist())
             indikator_df['LOCATION_CODE'] = df['LOCATION_CODE'].values
             indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
-    
+
             # Tambahkan kolom pelanggan jika tidak ada
             for col in ['NAMA', 'ALAMAT', 'TARIF', 'DAYA']:
-            if col not in df.columns:
-            df[col] = "-"
-    
+                if col not in df.columns:
+                    df[col] = "-"
+
             indikator_bobot = {
-            'arus_hilang': 2, 'over_current': 1, 'over_voltage': 1, 'v_drop': 1,
-            'cos_phi_kecil': 1, 'active_power_negative': 2, 'arus_kecil_teg_kecil': 1,
-            'unbalance_I': 1, 'v_lost': 2, 'In_more_Imax': 1,
-            'active_power_negative_siang': 2, 'active_power_negative_malam': 2,
-            'active_p_lost': 2, 'current_loop': 2, 'freeze': 2
+                'arus_hilang': 2, 'over_current': 1, 'over_voltage': 1, 'v_drop': 1,
+                'cos_phi_kecil': 1, 'active_power_negative': 2, 'arus_kecil_teg_kecil': 1,
+                'unbalance_I': 1, 'v_lost': 2, 'In_more_Imax': 1,
+                'active_power_negative_siang': 2, 'active_power_negative_malam': 2,
+                'active_p_lost': 2, 'current_loop': 2, 'freeze': 2
             }
-    
-                
+
+            
             # Ambil info pelanggan dari data terbaru per LOCATION_CODE
             if 'TANGGAL' in df.columns:
-            df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
-            df_info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
-                else:
-                    df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
-    
-                df_info = df_info[['LOCATION_CODE', 'NAMA_PELANGGAN', 'TARIFF', 'POWER']].rename(
-                    columns={'NAMA_PELANGGAN': 'NAMA', 'TARIFF': 'TARIF', 'POWER': 'DAYA'}
-                )
-    
-    
-                kolom_indikator = list(indikator_bobot.keys())
-                indikator_df['Jumlah Indikator'] = indikator_df[kolom_indikator].sum(axis=1)
-                indikator_df['Skor'] = indikator_df.apply(lambda row: sum(indikator_bobot.get(col, 1) for col in indikator_bobot if row[col]), axis=1)
-    
-                # Pastikan LOCATION_CODE bertipe string dan bersih
-                df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
-                indikator_df['LOCATION_CODE'] = df['LOCATION_CODE'].values
-                df_info['LOCATION_CODE'] = df_info['LOCATION_CODE'].astype(str).str.strip()
-    
-    
-                
-                # Ambil info pelanggan dari data terbaru per LOCATION_CODE
-                if 'TANGGAL' in df.columns:
-                    df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
-                    df_info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
-                else:
-                    df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
-    
-                df_info = df_info[['LOCATION_CODE', 'NAMA_PELANGGAN', 'TARIFF', 'POWER']].rename(
-                    columns={'NAMA_PELANGGAN': 'NAMA', 'TARIFF': 'TARIF', 'POWER': 'DAYA'}
-                )
-    
-    
-                result = pd.merge(
-                    indikator_df.reset_index(drop=True),
-                    df_info,
-                    on='LOCATION_CODE',
-                    how='left'
-                )
-    
-                top50 = result.sort_values(by='Skor', ascending=False).head(50)
-    
-                col1, col2, col3 = st.columns([1.2, 1.2, 1])
-                col1.metric("📄 Total Data", len(df))
-                col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
-                st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
-    
-                st.download_button(
-                    label="📥 Download Hasil Lengkap (Excel)",
-                    data=result.to_csv(index=False).encode('utf-8'),
-                    file_name="hasil_target_operasi_amr.csv",
-                    mime="text/csv"
-                )
-    
-                st.dataframe(
-                    top50[['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA'] + list(indikator_bobot.keys()) + ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']],
-                    use_container_width=True,
-                    height=600
-                )
-    
-                st.subheader("📈 Visualisasi Indikator Anomali")
-                kolom_indikator = list(indikator_bobot.keys())
-                indikator_counts = indikator_df[kolom_indikator].sum().sort_values(ascending=False).reset_index()
-                indikator_counts.columns = ['Indikator', 'Jumlah']
-                fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
-                st.plotly_chart(fig, use_container_width=True)
+                df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
+                df_info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
             else:
-                st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
-    # ------------------ Upload Data ------------------  ------------------ #
+                df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
+
+            df_info = df_info[['LOCATION_CODE', 'NAMA_PELANGGAN', 'TARIFF', 'POWER']].rename(
+                columns={'NAMA_PELANGGAN': 'NAMA', 'TARIFF': 'TARIF', 'POWER': 'DAYA'}
+            )
+
+
+            kolom_indikator = list(indikator_bobot.keys())
+            indikator_df['Jumlah Indikator'] = indikator_df[kolom_indikator].sum(axis=1)
+            indikator_df['Skor'] = indikator_df.apply(lambda row: sum(indikator_bobot.get(col, 1) for col in indikator_bobot if row[col]), axis=1)
+
+            # Pastikan LOCATION_CODE bertipe string dan bersih
+            df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
+            indikator_df['LOCATION_CODE'] = df['LOCATION_CODE'].values
+            df_info['LOCATION_CODE'] = df_info['LOCATION_CODE'].astype(str).str.strip()
+
+
+            
+            # Ambil info pelanggan dari data terbaru per LOCATION_CODE
+            if 'TANGGAL' in df.columns:
+                df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
+                df_info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
+            else:
+                df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
+
+            df_info = df_info[['LOCATION_CODE', 'NAMA_PELANGGAN', 'TARIFF', 'POWER']].rename(
+                columns={'NAMA_PELANGGAN': 'NAMA', 'TARIFF': 'TARIF', 'POWER': 'DAYA'}
+            )
+
+
+            result = pd.merge(
+                indikator_df.reset_index(drop=True),
+                df_info,
+                on='LOCATION_CODE',
+                how='left'
+            )
+
+            top50 = result.sort_values(by='Skor', ascending=False).head(50)
+
+            col1, col2, col3 = st.columns([1.2, 1.2, 1])
+            col1.metric("📄 Total Data", len(df))
+            col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
+            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+
+            st.download_button(
+                label="📥 Download Hasil Lengkap (Excel)",
+                data=result.to_csv(index=False).encode('utf-8'),
+                file_name="hasil_target_operasi_amr.csv",
+                mime="text/csv"
+            )
+
+            st.dataframe(
+                top50[['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA'] + list(indikator_bobot.keys()) + ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']],
+                use_container_width=True,
+                height=600
+            )
+
+            st.subheader("📈 Visualisasi Indikator Anomali")
+            kolom_indikator = list(indikator_bobot.keys())
+            indikator_counts = indikator_df[kolom_indikator].sum().sort_values(ascending=False).reset_index()
+            indikator_counts.columns = ['Indikator', 'Jumlah']
+            fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
+# ------------------ Upload Data ------------------  ------------------ #
     with tab2:
         uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
         if uploaded_file:
@@ -344,17 +337,15 @@ with tab2:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
             if os.path.exists(data_path):
-    w    i    df_hist = pd.read_csv(data_path)
-    w    df = pd.concat([df_hist, df], ignore_index=True).drop_duplicates()
-    w    df.to_csv(data_path, index=False)
-    w    st.success("Data berhasil ditambahkan ke histori.")
-    
-            if st.button("🗑️ Hapus Semua Data Historis"):
-            if os.path.exists(data_path):
-    w    i    os.remove(data_path)
-    w    st.success("Data historis berhasil dihapus.")
-    
+                df_hist = pd.read_csv(data_path)
+                df = pd.concat([df_hist, df], ignore_index=True).drop_duplicates()
+            df.to_csv(data_path, index=False)
+            st.success("Data berhasil ditambahkan ke histori.")
 
+        if st.button("🗑️ Hapus Semua Data Historis"):
+            if os.path.exists(data_path):
+                os.remove(data_path)
+                st.success("Data historis berhasil dihapus.")
 
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
