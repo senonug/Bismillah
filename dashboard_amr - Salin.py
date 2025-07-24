@@ -87,7 +87,7 @@ with tab2:
         Operasi Logika yang digunakan di sini adalah **OR**. Dengan demikian, indikator yang sesuai dengan salah satu spesifikasi aturan tersebut akan di-highlight berwarna hijau cerah dan berkontribusi pada perhitungan potensi TO.
         """)
 
-    colA, colB = st.columns(2)
+        colA, colB = st.columns(2)
         with colA:
             st.markdown("#### Tegangan Drop")
             st.number_input("Set Batas Atas Tegangan Menengah (tm)", key="v_tm_max", value=56.0)
@@ -265,17 +265,14 @@ with tab2:
             df_merge = df_info[['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA']].copy()
             result = pd.concat([df_merge.reset_index(drop=True), indikator_df.reset_index(drop=True)], axis=1)
 
-# 🔄 Update logic untuk menghapus None dan daya 1-phase serta ID unik
-daya_1phase = [450, 900, 1300, 2200, 3500, 4400, 5500, 7700, 11000]
-result = result[~result['DAYA'].isin(daya_1phase)]
-result = result.dropna(subset=['NAMA', 'TARIF', 'DAYA'])
-result = result.drop_duplicates(subset='LOCATION_CODE')
-top50 = result.sort_values(by='Skor', ascending=False).head(50)
+            top50 = result.sort_values(by='Skor', ascending=False).head(50)
+
+            col1, col2, col3 = st.columns([1.2, 1.2, 1])
             col1.metric("📄 Total Data", len(df))
             col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
             st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
 
-    st.download_button(
+            st.download_button(
                 label="📥 Download Hasil Lengkap (Excel)",
                 data=result.to_csv(index=False).encode('utf-8'),
                 file_name="hasil_target_operasi_amr.csv",
@@ -456,7 +453,7 @@ with tab_pasca:
 
         st.metric("Pelanggan Berpotensi TO", len(df_to))
         st.dataframe(df_to.head(1000), use_container_width=True)
-    st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
+        st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
 
     else:
         df = pd.DataFrame()
@@ -472,6 +469,6 @@ with tab_prabayar:
         st.dataframe(df.head(50), use_container_width=True)
         fig = px.histogram(df, x="skor_risiko", color="skor_risiko", title="Distribusi Risiko Prabayar")
         st.plotly_chart(fig, use_container_width=True)
-    st.download_button("📤 Download Excel", df.to_csv(index=False).encode(), file_name="hasil_prabayar.csv", mime="text/csv")
+        st.download_button("📤 Download Excel", df.to_csv(index=False).encode(), file_name="hasil_prabayar.csv", mime="text/csv")
     else:
         st.info("Silakan upload file Excel pelanggan prabayar.")
