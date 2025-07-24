@@ -265,10 +265,9 @@ with tab2:
             df_merge = df_info[['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA']].copy()
             result = pd.concat([df_merge.reset_index(drop=True), indikator_df.reset_index(drop=True)], axis=1)
 
-# Ambil top 50 unik berdasarkan skor tertinggi dan IDPEL unik
-top50 = result.sort_values('Skor', ascending=False).drop_duplicates('LOCATION_CODE').head(50)
+            top50 = result.sort_values(by='Skor', ascending=False).head(50)
 
-    col1, col2, col3 = st.columns([1.2, 1.2, 1])
+col1, col2, col3 = st.columns([1.2, 1.2, 1])
             col1.metric("📄 Total Data", len(df))
             col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
             st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
