@@ -225,7 +225,7 @@ with tab2:
     with tab1:
         data_path = "data_harian.csv"
         if os.path.exists(data_path):
-                 proses_analisis = st.checkbox("✅ Jalankan analisis berdasarkan threshold di atas", key="proses_analisis")
+        i    proses_analisis = st.checkbox("✅ Jalankan analisis berdasarkan threshold di atas", key="proses_analisis")
                  if proses_analisis:
             df = pd.read_csv(data_path)
     
@@ -344,14 +344,14 @@ with tab2:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
             if os.path.exists(data_path):
-                    df_hist = pd.read_csv(data_path)
+            i    df_hist = pd.read_csv(data_path)
                     df = pd.concat([df_hist, df], ignore_index=True).drop_duplicates()
                 df.to_csv(data_path, index=False)
                 st.success("Data berhasil ditambahkan ke histori.")
     
             if st.button("🗑️ Hapus Semua Data Historis"):
             if os.path.exists(data_path):
-                    os.remove(data_path)
+            i    os.remove(data_path)
                     st.success("Data historis berhasil dihapus.")
 
 
