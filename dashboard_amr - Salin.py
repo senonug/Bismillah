@@ -265,9 +265,12 @@ with tab2:
             df_merge = df_info[['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA']].copy()
             result = pd.concat([df_merge.reset_index(drop=True), indikator_df.reset_index(drop=True)], axis=1)
 
-            top50 = result.sort_values(by='Skor', ascending=False).head(50)
-
-            col1, col2, col3 = st.columns([1.2, 1.2, 1])
+# 🔄 Update logic untuk menghapus None dan daya 1-phase serta ID unik
+daya_1phase = [450, 900, 1300, 2200, 3500, 4400, 5500, 7700, 11000]
+result = result[~result['DAYA'].isin(daya_1phase)]
+result = result.dropna(subset=['NAMA', 'TARIF', 'DAYA'])
+result = result.drop_duplicates(subset='LOCATION_CODE')
+top50 = result.sort_values(by='Skor', ascending=False).head(50)
             col1.metric("📄 Total Data", len(df))
             col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
             st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
