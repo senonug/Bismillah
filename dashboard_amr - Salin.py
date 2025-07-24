@@ -13,7 +13,7 @@ if not st.session_state["logged_in"]:
     with st.container():
         st.markdown("<h1 style='text-align:center; color:#005aa7;'>T-Energy</h1>", unsafe_allow_html=True)
         with st.form("login_form"):
-            st.subheader("Masuk ke Dashboard")
+st.subheader("Masuk ke Dashboard")
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
             submitted = st.form_submit_button("🔒 Sign In with IAM PLN")
@@ -33,7 +33,7 @@ if 'logged_in' not in st.session_state:
 
 if not st.session_state['logged_in']:
     with st.sidebar:
-        st.subheader("Login Pegawai")
+st.subheader("Login Pegawai")
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Login"):
@@ -270,7 +270,7 @@ with tab2:
 col1, col2, col3 = st.columns([1.2, 1.2, 1])
 col1.metric("📄 Total Data", len(df))
 col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
-            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
 
             st.download_button(
                 label="📥 Download Hasil Lengkap (Excel)",
@@ -285,7 +285,7 @@ col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
                 height=600
             )
 
-            st.subheader("📈 Visualisasi Indikator Anomali")
+st.subheader("📈 Visualisasi Indikator Anomali")
             indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
             indikator_counts.columns = ['Indikator', 'Jumlah']
             fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
@@ -394,7 +394,7 @@ with tab_pasca:
 
         # Riwayat Konsumsi dan Grafik Konsumsi KWH Bulanan
         if selected_idpel != "Semua" and len(df_filtered) == 1:
-            st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
+st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
             df_idpel = df[df["IDPEL"].astype(str) == selected_idpel].sort_values("THBLREK")
             # Tangani data kosong atau hilang
             df_idpel = df_idpel.dropna(subset=["THBLREK", "PEMKWH"])
@@ -411,7 +411,7 @@ with tab_pasca:
                                   hover_data=["NAMA", "ALAMAT"])
                 st.plotly_chart(fig_line, use_container_width=True)
 
-        st.subheader("🎯 Rekomendasi Target Operasi")
+st.subheader("🎯 Rekomendasi Target Operasi")
 
         with st.expander("⚙️ Parameter Indikator Risiko (Opsional)"):
             min_jamnyala = st.number_input("Jam Nyala Minimum", value=50)
