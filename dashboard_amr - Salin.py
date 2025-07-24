@@ -87,7 +87,7 @@ with tab2:
         Operasi Logika yang digunakan di sini adalah **OR**. Dengan demikian, indikator yang sesuai dengan salah satu spesifikasi aturan tersebut akan di-highlight berwarna hijau cerah dan berkontribusi pada perhitungan potensi TO.
         """)
 
-        colA, colB = st.columns(2)
+    colA, colB = st.columns(2)
         with colA:
             st.markdown("#### Tegangan Drop")
             st.number_input("Set Batas Atas Tegangan Menengah (tm)", key="v_tm_max", value=56.0)
@@ -275,7 +275,7 @@ top50 = result.sort_values(by='Skor', ascending=False).head(50)
             col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
             st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
 
-            st.download_button(
+    st.download_button(
                 label="📥 Download Hasil Lengkap (Excel)",
                 data=result.to_csv(index=False).encode('utf-8'),
                 file_name="hasil_target_operasi_amr.csv",
@@ -456,7 +456,7 @@ with tab_pasca:
 
         st.metric("Pelanggan Berpotensi TO", len(df_to))
         st.dataframe(df_to.head(1000), use_container_width=True)
-        st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
+    st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
 
     else:
         df = pd.DataFrame()
@@ -472,6 +472,6 @@ with tab_prabayar:
         st.dataframe(df.head(50), use_container_width=True)
         fig = px.histogram(df, x="skor_risiko", color="skor_risiko", title="Distribusi Risiko Prabayar")
         st.plotly_chart(fig, use_container_width=True)
-        st.download_button("📤 Download Excel", df.to_csv(index=False).encode(), file_name="hasil_prabayar.csv", mime="text/csv")
+    st.download_button("📤 Download Excel", df.to_csv(index=False).encode(), file_name="hasil_prabayar.csv", mime="text/csv")
     else:
         st.info("Silakan upload file Excel pelanggan prabayar.")
