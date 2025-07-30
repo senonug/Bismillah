@@ -3,6 +3,39 @@ import pandas as pd
 import os
 import plotly.express as px
 
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+
+def detect_to_ml(df):
+    fitur_teknis = [
+        "CURRENT_L1", "CURRENT_L2", "CURRENT_L3",
+        "VOLTAGE_L1", "VOLTAGE_L2", "VOLTAGE_L3",
+        "ACTIVE_POWER_L1", "ACTIVE_POWER_L2", "ACTIVE_POWER_L3",
+        "ACTIVE_POWER_SIANG", "ACTIVE_POWER_MALAM",
+        "POWER_FACTOR_L1", "POWER_FACTOR_L2", "POWER_FACTOR_L3",
+        "CURRENT_LOOP", "FREEZE"
+    ]
+    df_clean = df.copy()
+    for col in fitur_teknis:
+        if col not in df_clean.columns:
+            df_clean[col] = 0
+        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0)
+
+    X = df_clean[fitur_teknis]
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    model = IsolationForest(n_estimators=100, contamination=0.1, random_state=42)
+    model.fit(X_scaled)
+
+    df_result = df.copy()
+    df_result['anomaly_score'] = model.decision_function(X_scaled)
+    df_result['TO_PRED'] = model.predict(X_scaled)
+    df_result['TO_PRED'] = df_result['TO_PRED'].map({1: 0, -1: 1})
+    return df_result
+
+
+
 # ------------------ Login ------------------ #
 st.set_page_config(page_title="T-Energy", layout="wide", page_icon="⚡")
 
@@ -290,6 +323,19 @@ with tab2:
             indikator_counts.columns = ['Indikator', 'Jumlah']
             fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
             st.plotly_chart(fig, use_container_width=True)
+            with st.expander("🤖 Prediksi TO dengan Machine Learning"):
+                if st.button("🔍 Jalankan Prediksi TO (ML)"):
+                    df_ml = detect_to_ml(df)
+                    hasil_ml = df_ml[df_ml["TO_PRED"] == 1].copy()
+                    st.metric("Jumlah Pelanggan Terindikasi TO (ML)", len(hasil_ml))
+                    st.dataframe(hasil_ml[["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF", "POWER", "TO_PRED", "anomaly_score"]].head(100), use_container_width=True)
+                    st.download_button(
+                        label="📥 Download Hasil Deteksi ML",
+                        data=hasil_ml.to_csv(index=False).encode(),
+                        file_name="hasil_ml_target_operasi.csv",
+                        mime="text/csv"
+                    )
+
         else:
             st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
 # ------------------ Upload Data ------------------  ------------------ #
