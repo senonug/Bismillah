@@ -35,6 +35,39 @@ def detect_to_ml(df):
     return df_result
 
 
+from sklearn.neighbors import NearestNeighbors
+
+def cari_pelanggan_mirip(df, idpel_target, n_tetangga=10):
+    fitur = [
+        "CURRENT_L1", "CURRENT_L2", "CURRENT_L3",
+        "VOLTAGE_L1", "VOLTAGE_L2", "VOLTAGE_L3",
+        "ACTIVE_POWER_L1", "ACTIVE_POWER_L2", "ACTIVE_POWER_L3",
+        "ACTIVE_POWER_SIANG", "ACTIVE_POWER_MALAM",
+        "POWER_FACTOR_L1", "POWER_FACTOR_L2", "POWER_FACTOR_L3",
+        "CURRENT_LOOP", "FREEZE"
+    ]
+    df_clean = df.copy()
+    for col in fitur:
+        df_clean[col] = pd.to_numeric(df_clean.get(col, 0), errors='coerce').fillna(0)
+
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(df_clean[fitur])
+
+    model = NearestNeighbors(n_neighbors=n_tetangga+1)
+    model.fit(X_scaled)
+
+    if idpel_target not in df_clean['LOCATION_CODE'].astype(str).values:
+        return pd.DataFrame()
+
+    idx_target = df_clean[df_clean['LOCATION_CODE'].astype(str) == idpel_target].index[0]
+    distances, indices = model.kneighbors([X_scaled[idx_target]])
+
+    hasil_mirip = df_clean.iloc[indices[0][1:]].copy()
+    hasil_mirip['Distance'] = distances[0][1:]
+    return hasil_mirip
+
+
 
 # ------------------ Login ------------------ #
 st.set_page_config(page_title="T-Energy", layout="wide", page_icon="⚡")
@@ -335,6 +368,25 @@ with tab2:
                         file_name="hasil_ml_target_operasi.csv",
                         mime="text/csv"
                     )
+
+            with st.expander("🧬 Analisa Kemiripan Pelanggan dengan TO Terbukti"):
+                idpel_input = st.text_input("Masukkan IDPEL Pelanggan yang Terbukti TO")
+                if st.button("🔍 Cari Pelanggan Mirip"):
+                    if idpel_input and idpel_input in df["LOCATION_CODE"].astype(str).values:
+                        hasil_mirip = cari_pelanggan_mirip(df, idpel_input)
+                        if not hasil_mirip.empty:
+                            st.metric("Pelanggan Mirip Ditemukan", len(hasil_mirip))
+                            st.dataframe(hasil_mirip[["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF", "POWER", "Distance"]].head(20), use_container_width=True)
+                            st.download_button(
+                                label="📥 Download Hasil Kemiripan",
+                                data=hasil_mirip.to_csv(index=False).encode(),
+                                file_name="hasil_kemiripan_pelanggan.csv",
+                                mime="text/csv"
+                            )
+                        else:
+                            st.warning("IDPEL tidak ditemukan di data.")
+                    else:
+                        st.warning("Silakan masukkan IDPEL yang valid.")
 
         else:
             st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
