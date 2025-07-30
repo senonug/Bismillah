@@ -48,7 +48,9 @@ def cari_pelanggan_mirip(df, idpel_target, n_tetangga=10):
     ]
     df_clean = df.copy()
     for col in fitur:
-        df_clean[col] = pd.to_numeric(df_clean.get(col, 0), errors='coerce').fillna(0)
+        if col not in df_clean.columns:
+            df_clean[col] = 0
+        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0)
 
     from sklearn.preprocessing import StandardScaler
     scaler = StandardScaler()
