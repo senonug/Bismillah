@@ -56,7 +56,7 @@ def cari_pelanggan_mirip(df, idpel_target, n_tetangga=10):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(df_clean[fitur])
 
-    model = NearestNeighbors(n_neighbors=n_tetangga+1)
+    model = NearestNeighbors(n_neighbors=n_tetangga + 1)
     model.fit(X_scaled)
 
     if idpel_target not in df_clean['LOCATION_CODE'].astype(str).values:
@@ -67,6 +67,13 @@ def cari_pelanggan_mirip(df, idpel_target, n_tetangga=10):
 
     hasil_mirip = df_clean.iloc[indices[0][1:]].copy()
     hasil_mirip['Distance'] = distances[0][1:]
+
+    # Buang IDPEL yang sama dengan target
+    hasil_mirip = hasil_mirip[hasil_mirip['LOCATION_CODE'].astype(str) != idpel_target]
+
+    # Buang duplikasi LOCATION_CODE
+    hasil_mirip = hasil_mirip.drop_duplicates(subset='LOCATION_CODE')
+
     return hasil_mirip
 
 
