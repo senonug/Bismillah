@@ -318,7 +318,9 @@ with tab_amr:
 
             # Tampilkan
             top_limit = st.session_state.get('top_limit', 50)
-            top50 = result.sort_values(by='Skor', ascending=False).head(top_limit)
+            top50 = (result.drop_duplicates(subset='LOCATION_CODE')
+                 .sort_values(by='Skor', ascending=False)
+                 .head(top_limit))
 
             col1, col2, col3 = st.columns([1.2, 1.2, 1])
             col1.metric("📄 Total Record Histori", len(df))
@@ -341,7 +343,35 @@ with tab_amr:
             indikator_counts = indikator_agg[[c for c in indikator_bobot.keys() if c in indikator_agg.columns]].sum().sort_values(ascending=False).reset_index()
             indikator_counts.columns = ['Indikator', 'Jumlah']
             fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
-            st.plotly_chart(fig, use_container_width=True)
+
+            # ==== Interaktif: klik bar untuk melihat IDPEL pada indikator terpilih ====
+            selected_indicator = None
+            try:
+                from streamlit_plotly_events import plotly_events  # type: ignore
+                st.markdown("**Klik salah satu batang (indikator) untuk melihat daftar IDPEL.**")
+                selected_points = plotly_events(fig, click_event=True, hover_event=False, select_event=False, override_height=500)
+                if selected_points:
+                    selected_indicator = selected_points[0].get('x')
+            except Exception:
+                st.plotly_chart(fig, use_container_width=True)
+                st.info("Interaksi klik membutuhkan paket `streamlit-plotly-events`. Karena belum tersedia, gunakan pemilih di bawah ini.")
+                selected_indicator = st.selectbox("Pilih indikator untuk melihat daftar IDPEL:", indikator_counts['Indikator'].tolist())
+
+            if selected_indicator:
+                if selected_indicator in indikator_agg.columns:
+                    id_list = indikator_agg.loc[indikator_agg[selected_indicator] == True, "LOCATION_CODE"].astype(str).unique().tolist()
+                    detail_df = result[result["LOCATION_CODE"].astype(str).isin(id_list)][["LOCATION_CODE", "NAMA", "TARIF", "DAYA"]].drop_duplicates(subset="LOCATION_CODE")
+                    st.subheader(f"📋 Daftar IDPEL untuk indikator: **{selected_indicator}** (unik: {len(detail_df)})")
+                    st.dataframe(detail_df, use_container_width=True, height=400)
+                    st.download_button(
+                        "📥 Download daftar IDPEL (CSV)",
+                        detail_df.to_csv(index=False).encode("utf-8"),
+                        file_name=f"idpel_{selected_indicator}.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.warning("Indikator tidak ditemukan di data.")
+            # (rendered below in interactive block)
 
             # ML
             with st.expander("🤖 Prediksi TO dengan Machine Learning"):
