@@ -8,35 +8,20 @@ from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
 
-
-# ------------------ Helper: filter only Customer rows ------------------ #
+# ===================== Helpers ===================== #
 def _filter_customer_only(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    # Normalize LOCATION_TYPE if available
-    if 'LOCATION_TYPE' in df.columns:
-        lt = df['LOCATION_TYPE'].astype(str).str.strip().str.lower()
-        df = df[lt == 'customer']
+    """
+    Keep only rows with LOCATION_TYPE == 'Customer' (case-insensitive).
+    Also accept common misspelling 'COSTUMER'. Leading/trailing spaces are trimmed.
+    """
+    if 'LOCATION_TYPE' not in df.columns:
+        st.warning("Kolom LOCATION_TYPE tidak ditemukan. Tidak dapat memfilter ke Customer saja.")
         return df
+    lt = df['LOCATION_TYPE'].astype(str).str.strip().str.lower()
+    allowed = {'customer', 'costumer'}  # handle typo 'costumer'
+    return df[lt.isin(allowed)].copy()
 
-    # Heuristic fallback when LOCATION_TYPE is absent:
-    # - keep rows with tariff-like codes (prefix letters) and positive/known POWER
-    # - exclude obvious asset/device names (e.g., starting with 'MT', 'MTD', 'TR', 'RG')
-    def _is_tariff_like(x):
-        try:
-            s = str(x).strip().upper()
-            return bool(re.match(r'^(R|S|B|I|P|G|T)[0-9].*', s))
-        except Exception:
-            return False
-    df['_tariff_like'] = df.get('TARIF', df.get('TARIFF', '')).apply(_is_tariff_like)
-    # name/device patterns
-    name_series = df.get('NAMA_PELANGGAN', df.get('NAMA', '')).astype(str).str.upper().str.strip()
-    device_mask = name_series.str.startswith(('MTD','MT ','MT-','TR','RG'))
-    power_series = pd.to_numeric(df.get('POWER', 0), errors='coerce').fillna(0)
 
-    df = df[(df['_tariff_like']) & (~device_mask) & (power_series >= 0)]
-    df = df.drop(columns=['_tariff_like'], errors='ignore')
-    return df
-# ------------------ Utilities: ML & Similarity ------------------ #
 def detect_to_ml(df):
     fitur_teknis = [
         "CURRENT_L1", "CURRENT_L2", "CURRENT_L3",
@@ -95,17 +80,14 @@ def cari_pelanggan_mirip(df, idpel_target, n_tetangga=10):
 
     hasil_mirip = df_clean.iloc[indices[0][1:]].copy()
     hasil_mirip['Distance'] = distances[0][1:]
-
-    # Buang IDPEL yang sama dengan target & duplikasi LOCATION_CODE
     hasil_mirip = hasil_mirip[hasil_mirip['LOCATION_CODE'].astype(str) != idpel_target]
     hasil_mirip = hasil_mirip.drop_duplicates(subset='LOCATION_CODE')
     return hasil_mirip
 
 
-# ------------------ App Config ------------------ #
+# ===================== App Config ===================== #
 st.set_page_config(page_title="T-Energy", layout="wide", page_icon="⚡")
 
-# ------------------ Session & Login ------------------ #
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
@@ -127,41 +109,22 @@ if not st.session_state["logged_in"]:
         st.markdown("<hr><div style='text-align:center; font-size:0.85rem;'>© 2025 PT PLN (Persero). All rights reserved.</div>", unsafe_allow_html=True)
     st.stop()
 
-st.markdown("""
-    <style>
-    .logout-button {
-        background-color: #f44336;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 if st.button("🔒 Logout", key="logout_button", help="Keluar dari dashboard"):
     st.session_state["logged_in"] = False
     st.success("Logout berhasil!")
     st.rerun()
 
-# ------------------ Tabs ------------------ #
 tab_amr, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
 
-# ------------------ Tab AMR Harian ------------------ #
-with tab_amr: 
+# ===================== Tab AMR Harian ===================== #
+with tab_amr:
     st.title("📊 Dashboard Target Operasi AMR - P2TL")
     st.markdown("---")
 
-    # shared paths (digunakan oleh tab Data & Upload)
     data_path = "data_harian.csv"
 
-    # ------------------ Parameter Threshold Section ------------------ #
     with st.expander("⚙️ Setting Parameter"):
-        st.markdown("""
-        Operasi Logika yang digunakan di sini adalah **OR**. Dengan demikian, indikator yang sesuai dengan salah satu spesifikasi aturan tersebut akan di-highlight berwarna hijau cerah dan berkontribusi pada perhitungan potensi TO.
-        """)
-
+        st.markdown("Operasi logika indikator adalah **OR** per LOCATION_CODE.")
         colA, colB = st.columns(2)
         with colA:
             st.markdown("#### Tegangan Drop")
@@ -226,7 +189,7 @@ with tab_amr:
         st.number_input("Jumlah Bobot ≥", key="min_weight", value=2)
         st.number_input("Banyak Data yang Ditampilkan", key="top_limit", value=50)
 
-    # ------------------ Fungsi Cek Indikator ------------------ #
+    # ========== Functions inside AMR tab ========== #
     def cek_indikator(row):
         indikator = {}
         indikator['arus_hilang'] = all([row['CURRENT_L1'] == 0, row['CURRENT_L2'] == 0, row['CURRENT_L3'] == 0])
@@ -275,27 +238,25 @@ with tab_amr:
         indikator['freeze'] = row.get('FREEZE', 0) == 1
         return indikator
 
-    # ------------------ Sub Tabs ------------------ #
     sub_data, sub_upload = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
 
-    # ------------------ Data Historis ------------------ #
     with sub_data:
         if os.path.exists(data_path):
             df = pd.read_csv(data_path)
 
             # --- Normalisasi dasar ---
-df = df.dropna(subset=['LOCATION_CODE']).copy()
-df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
+            df = df.dropna(subset=['LOCATION_CODE']).copy()
+            df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
 
-# Filter hanya LOCATION_TYPE == Customer (atau heuristik bila kolom tidak ada)
-df = _filter_customer_only(df)
+            # === Filter hanya Customer/COSTUMER ===
+            df = _filter_customer_only(df)
 
-# Tambahkan kolom pelanggan jika tidak ada
+            # Tambahkan kolom pelanggan jika tidak ada
             for col in ['NAMA_PELANGGAN', 'TARIFF', 'POWER']:
                 if col not in df.columns:
                     df[col] = "-"
 
-            # Hitung jumlah kemunculan per IDPEL (untuk informasi 'Jumlah Berulang')
+            # Hitung jumlah kemunculan per IDPEL
             df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
 
             # Hitung indikator per baris
@@ -335,11 +296,16 @@ df = _filter_customer_only(df)
             else:
                 df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
 
-            df_info = df_info[['LOCATION_CODE', 'NAMA_PELANGGAN', 'TARIF' if 'TARIF' in df_info.columns else 'TARIFF', 'POWER']].rename(
-                columns={'NAMA_PELANGGAN': 'NAMA', 'TARIFF': 'TARIF', 'POWER': 'DAYA'}
-            )
+            # Konsistensi nama kolom
+            if 'TARIF' in df_info.columns:
+                tarif_col = 'TARIF'
+            else:
+                tarif_col = 'TARIFF' if 'TARIFF' in df_info.columns else None
+
+            use_cols = ['LOCATION_CODE', 'NAMA_PELANGGAN', tarif_col, 'POWER'] if tarif_col else ['LOCATION_CODE', 'NAMA_PELANGGAN', 'POWER']
+            df_info = df_info[use_cols].rename(columns={'NAMA_PELANGGAN': 'NAMA', 'TARIFF': 'TARIF', 'POWER': 'DAYA'})
             if 'TARIF' not in df_info.columns:
-                df_info['TARIF'] = '-'  # fallback kalau kolom tariff tidak ada
+                df_info['TARIF'] = '-'
 
             # Merge rapi
             result = df_info.merge(indikator_agg, on='LOCATION_CODE', how='right')
@@ -347,17 +313,17 @@ df = _filter_customer_only(df)
                 if c in result.columns:
                     result[c] = result[c].fillna('-')
 
-            # Tampilkan
+            # Top 50 unik per IDPEL
             top_limit = st.session_state.get('top_limit', 50)
             top50 = (result.drop_duplicates(subset='LOCATION_CODE')
-                 .sort_values(by='Skor', ascending=False)
-                 .head(top_limit))
+                            .sort_values(by='Skor', ascending=False)
+                            .head(top_limit))
 
             col1, col2, col3 = st.columns([1.2, 1.2, 1])
-            col1.metric("📄 Total Record Histori", len(df))
+            col1.metric("📄 Total Record Histori (Customer)", len(df))
             col3.metric("🎯 Pelanggan Potensial TO", int((result['Skor'] > 0).sum()))
 
-            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+            st.subheader("🏆 Top 50 Rekomendasi Target Operasi (unik per IDPEL)")
             st.download_button(
                 label="📥 Download Hasil Lengkap (Excel)",
                 data=result.to_csv(index=False).encode('utf-8'),
@@ -370,12 +336,12 @@ df = _filter_customer_only(df)
                            ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']
             st.dataframe(top50[kolom_tampil], use_container_width=True, height=600)
 
-            # Visualisasi
+            # Visualisasi frekuensi indikator (per ID unik, hasil agregasi)
             indikator_counts = indikator_agg[[c for c in indikator_bobot.keys() if c in indikator_agg.columns]].sum().sort_values(ascending=False).reset_index()
             indikator_counts.columns = ['Indikator', 'Jumlah']
             fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
 
-            # ==== Interaktif: klik bar untuk melihat IDPEL pada indikator terpilih ====
+            # ==== Interaktif: klik bar untuk melihat IDPEL (pakai plotly_events jika ada) ====
             selected_indicator = None
             try:
                 from streamlit_plotly_events import plotly_events  # type: ignore
@@ -402,15 +368,15 @@ df = _filter_customer_only(df)
                     )
                 else:
                     st.warning("Indikator tidak ditemukan di data.")
-            # (rendered below in interactive block)
 
-            # ML
+            # ML & Similarity
             with st.expander("🤖 Prediksi TO dengan Machine Learning"):
                 if st.button("🔍 Jalankan Prediksi TO (ML)"):
                     df_ml = detect_to_ml(df)
                     hasil_ml = df_ml[df_ml["TO_PRED"] == 1].copy()
                     st.metric("Jumlah Pelanggan Terindikasi TO (ML)", len(hasil_ml))
-                    st.dataframe(hasil_ml[["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF" if "TARIFF" in hasil_ml.columns else "TARIF", "POWER", "TO_PRED", "anomaly_score"]].head(100), use_container_width=True)
+                    cols_ml = [c for c in ["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF", "TARIF", "POWER", "TO_PRED", "anomaly_score"] if c in hasil_ml.columns]
+                    st.dataframe(hasil_ml[cols_ml].head(100), use_container_width=True)
                     st.download_button(
                         label="📥 Download Hasil Deteksi ML",
                         data=hasil_ml.to_csv(index=False).encode(),
@@ -418,7 +384,6 @@ df = _filter_customer_only(df)
                         mime="text/csv"
                     )
 
-            # Similarity
             with st.expander("🧬 Analisa Kemiripan Pelanggan dengan TO Terbukti"):
                 idpel_input = st.text_input("Masukkan IDPEL Pelanggan yang Terbukti TO")
                 if st.button("🔍 Cari Pelanggan Mirip"):
@@ -426,8 +391,7 @@ df = _filter_customer_only(df)
                         hasil_mirip = cari_pelanggan_mirip(df, idpel_input)
                         if not hasil_mirip.empty:
                             st.metric("Pelanggan Mirip Ditemukan", len(hasil_mirip))
-                            view_cols = ["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF" if "TARIFF" in hasil_mirip.columns else "TARIF", "POWER", "Distance"]
-                            view_cols = [c for c in view_cols if c in hasil_mirip.columns]
+                            view_cols = [c for c in ["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF", "TARIF", "POWER", "Distance"] if c in hasil_mirip.columns]
                             st.dataframe(hasil_mirip[view_cols].head(20), use_container_width=True)
                             st.download_button(
                                 label="📥 Download Hasil Kemiripan",
@@ -442,12 +406,17 @@ df = _filter_customer_only(df)
         else:
             st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
 
-    # ------------------ Upload Data ------------------ #
     with sub_upload:
         uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
         if uploaded_file:
             df = pd.read_excel(uploaded_file, sheet_name=0)
             df = df.dropna(subset=['LOCATION_CODE'])
+
+            # normalisasi dasar
+            df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
+
+            # apply filter Customer saat upload juga
+            df = _filter_customer_only(df)
 
             num_cols = [
                 'CURRENT_L1', 'CURRENT_L2', 'CURRENT_L3',
@@ -464,7 +433,7 @@ df = _filter_customer_only(df)
                 df_hist = pd.read_csv(data_path)
                 df = pd.concat([df_hist, df], ignore_index=True).drop_duplicates()
             df.to_csv(data_path, index=False)
-            st.success("Data berhasil ditambahkan ke histori.")
+            st.success("Data (Customer saja) berhasil ditambahkan ke histori.")
 
         # Konfirmasi hapus
         if st.button("🗑️ Hapus Semua Data Historis"):
@@ -483,7 +452,7 @@ df = _filter_customer_only(df)
                 if st.button("❌ Batal"):
                     st.session_state['_confirm_del_amr'] = False
 
-# ------------------ Tab Pascabayar ------------------ #
+# ===================== Tab Pascabayar ===================== #
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
@@ -505,7 +474,6 @@ with tab_pasca:
         except Exception as e:
             st.error(f"Gagal memproses file: {e}")
 
-    # Konfirmasi hapus OLAP
     if st.button("🗑 Hapus Histori OLAP Pascabayar"):
         st.session_state['_confirm_del_olap'] = True
     if st.session_state.get('_confirm_del_olap'):
@@ -527,7 +495,6 @@ with tab_pasca:
         if df.duplicated(subset=["IDPEL", "THBLREK"]).any():
             st.warning("⚠️ Terdapat duplikat kombinasi IDPEL dan THBLREK. Data akan dirata-ratakan.")
 
-        # Input nilai penurunan terlebih dahulu
         drop_threshold = st.number_input("Penurunan Pemakaian kWh 3 Bulan Terakhir (%)", value=30, min_value=0, max_value=100, step=1)
         use_drop_threshold = st.checkbox("Aktifkan Filter Penurunan Pemakaian kWh", value=False)
 
@@ -624,7 +591,7 @@ with tab_pasca:
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
 
-# ------------------ Tab Prabayar ------------------ #
+# ===================== Tab Prabayar ===================== #
 with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
