@@ -8,6 +8,34 @@ from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
 
+
+# ------------------ Helper: filter only Customer rows ------------------ #
+def _filter_customer_only(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    # Normalize LOCATION_TYPE if available
+    if 'LOCATION_TYPE' in df.columns:
+        lt = df['LOCATION_TYPE'].astype(str).str.strip().str.lower()
+        df = df[lt == 'customer']
+        return df
+
+    # Heuristic fallback when LOCATION_TYPE is absent:
+    # - keep rows with tariff-like codes (prefix letters) and positive/known POWER
+    # - exclude obvious asset/device names (e.g., starting with 'MT', 'MTD', 'TR', 'RG')
+    def _is_tariff_like(x):
+        try:
+            s = str(x).strip().upper()
+            return bool(re.match(r'^(R|S|B|I|P|G|T)[0-9].*', s))
+        except Exception:
+            return False
+    df['_tariff_like'] = df.get('TARIF', df.get('TARIFF', '')).apply(_is_tariff_like)
+    # name/device patterns
+    name_series = df.get('NAMA_PELANGGAN', df.get('NAMA', '')).astype(str).str.upper().str.strip()
+    device_mask = name_series.str.startswith(('MTD','MT ','MT-','TR','RG'))
+    power_series = pd.to_numeric(df.get('POWER', 0), errors='coerce').fillna(0)
+
+    df = df[(df['_tariff_like']) & (~device_mask) & (power_series >= 0)]
+    df = df.drop(columns=['_tariff_like'], errors='ignore')
+    return df
 # ------------------ Utilities: ML & Similarity ------------------ #
 def detect_to_ml(df):
     fitur_teknis = [
@@ -256,10 +284,13 @@ with tab_amr:
             df = pd.read_csv(data_path)
 
             # --- Normalisasi dasar ---
-            df = df.dropna(subset=['LOCATION_CODE']).copy()
-            df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
+df = df.dropna(subset=['LOCATION_CODE']).copy()
+df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
 
-            # Tambahkan kolom pelanggan jika tidak ada
+# Filter hanya LOCATION_TYPE == Customer (atau heuristik bila kolom tidak ada)
+df = _filter_customer_only(df)
+
+# Tambahkan kolom pelanggan jika tidak ada
             for col in ['NAMA_PELANGGAN', 'TARIFF', 'POWER']:
                 if col not in df.columns:
                     df[col] = "-"
