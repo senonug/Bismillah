@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import os
@@ -5,7 +6,9 @@ import plotly.express as px
 
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import NearestNeighbors
 
+# ------------------ Utilities: ML & Similarity ------------------ #
 def detect_to_ml(df):
     fitur_teknis = [
         "CURRENT_L1", "CURRENT_L2", "CURRENT_L3",
@@ -35,8 +38,6 @@ def detect_to_ml(df):
     return df_result
 
 
-from sklearn.neighbors import NearestNeighbors
-
 def cari_pelanggan_mirip(df, idpel_target, n_tetangga=10):
     fitur = [
         "CURRENT_L1", "CURRENT_L2", "CURRENT_L3",
@@ -52,7 +53,6 @@ def cari_pelanggan_mirip(df, idpel_target, n_tetangga=10):
             df_clean[col] = 0
         df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0)
 
-    from sklearn.preprocessing import StandardScaler
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(df_clean[fitur])
 
@@ -68,19 +68,16 @@ def cari_pelanggan_mirip(df, idpel_target, n_tetangga=10):
     hasil_mirip = df_clean.iloc[indices[0][1:]].copy()
     hasil_mirip['Distance'] = distances[0][1:]
 
-    # Buang IDPEL yang sama dengan target
+    # Buang IDPEL yang sama dengan target & duplikasi LOCATION_CODE
     hasil_mirip = hasil_mirip[hasil_mirip['LOCATION_CODE'].astype(str) != idpel_target]
-
-    # Buang duplikasi LOCATION_CODE
     hasil_mirip = hasil_mirip.drop_duplicates(subset='LOCATION_CODE')
-
     return hasil_mirip
 
 
-
-# ------------------ Login ------------------ #
+# ------------------ App Config ------------------ #
 st.set_page_config(page_title="T-Energy", layout="wide", page_icon="⚡")
 
+# ------------------ Session & Login ------------------ #
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
@@ -102,25 +99,6 @@ if not st.session_state["logged_in"]:
         st.markdown("<hr><div style='text-align:center; font-size:0.85rem;'>© 2025 PT PLN (Persero). All rights reserved.</div>", unsafe_allow_html=True)
     st.stop()
 
-
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
-
-if not st.session_state['logged_in']:
-    with st.sidebar:
-        st.subheader("Login Pegawai")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            if username == "admin" and password == "pln123":
-                st.session_state['logged_in'] = True
-                st.success("Login berhasil!")
-                st.rerun()
-            else:
-                st.error("Username/password salah")
-    st.stop()
-
-# ------------------ Tombol Logout ------------------ #
 st.markdown("""
     <style>
     .logout-button {
@@ -139,22 +117,16 @@ if st.button("🔒 Logout", key="logout_button", help="Keluar dari dashboard"):
     st.success("Logout berhasil!")
     st.rerun()
 
+# ------------------ Tabs ------------------ #
+tab_amr, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
 
 # ------------------ Tab AMR Harian ------------------ #
-tab2, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
-
-# ------------------ Tab AMR Harian ------------------ #
-with tab2: 
+with tab_amr: 
     st.title("📊 Dashboard Target Operasi AMR - P2TL")
     st.markdown("---")
 
-    # ------------------ Ambil semua parameter threshold dari session state ------------------ #
-    param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float, float))}
-
-    # ------------------ Parameter Threshold Section ------------------ #
-
-    # ------------------ Ambil semua parameter threshold dari session state ------------------ #
-    param = {k: v for k, v in st.session_state.items() if isinstance(v, (int, float, float))}
+    # shared paths (digunakan oleh tab Data & Upload)
+    data_path = "data_harian.csv"
 
     # ------------------ Parameter Threshold Section ------------------ #
     with st.expander("⚙️ Setting Parameter"):
@@ -180,7 +152,6 @@ with tab2:
             st.number_input("Set Batas Bawah Arus Reverse Power TM", key="reverse_i_tm", value=0.5)
             st.number_input("Set Batas Bawah Arus Reverse Power TR", key="reverse_i_tr", value=0.7)
 
-        with colA:
             st.markdown("#### Tegangan Hilang")
             st.number_input("Nilai Tegangan Menengah Hilang (tm)", key="v_tm_zero", value=0.0)
             st.number_input("Nilai Tegangan Rendah Hilang (tr)", key="v_tr_zero", value=0.0)
@@ -207,7 +178,6 @@ with tab2:
             st.number_input("Set Selisih Tegangan TM", key="low_v_diff_tm", value=2.0)
             st.number_input("Set Selisih Tegangan TR", key="low_v_diff_tr", value=8.0)
 
-        with colB:
             st.markdown("#### Arus Hilang")
             st.number_input("Set Batas Arus Hilang pada TM", key="loss_i_tm", value=0.02)
             st.number_input("Set Batas Arus Hilang pada TR", key="loss_i_tr", value=0.02)
@@ -228,25 +198,24 @@ with tab2:
         st.number_input("Jumlah Bobot ≥", key="min_weight", value=2)
         st.number_input("Banyak Data yang Ditampilkan", key="top_limit", value=50)
 
-    # ------------------ Fungsi Cek ------------------ #
+    # ------------------ Fungsi Cek Indikator ------------------ #
     def cek_indikator(row):
-        # fungsi untuk mendeteksi anomali teknis pelanggan AMR
         indikator = {}
         indikator['arus_hilang'] = all([row['CURRENT_L1'] == 0, row['CURRENT_L2'] == 0, row['CURRENT_L3'] == 0])
         indikator['over_current'] = any([
-            row['CURRENT_L1'] > param.get('over_i_tm', 5.0),
-            row['CURRENT_L2'] > param.get('over_i_tm', 5.0),
-            row['CURRENT_L3'] > param.get('over_i_tm', 5.0)
+            row['CURRENT_L1'] > st.session_state.get('over_i_tm', 5.0),
+            row['CURRENT_L2'] > st.session_state.get('over_i_tm', 5.0),
+            row['CURRENT_L3'] > st.session_state.get('over_i_tm', 5.0)
         ])
         indikator['over_voltage'] = any([
-            row['VOLTAGE_L1'] > param.get('vmax_tm', 62.0),
-            row['VOLTAGE_L2'] > param.get('vmax_tm', 62.0),
-            row['VOLTAGE_L3'] > param.get('vmax_tm', 62.0)
+            row['VOLTAGE_L1'] > st.session_state.get('vmax_tm', 62.0),
+            row['VOLTAGE_L2'] > st.session_state.get('vmax_tm', 62.0),
+            row['VOLTAGE_L3'] > st.session_state.get('vmax_tm', 62.0)
         ])
         v = [row['VOLTAGE_L1'], row['VOLTAGE_L2'], row['VOLTAGE_L3']]
-        indikator['v_drop'] = max(v) - min(v) > param.get('low_v_diff_tm', 2.0)
+        indikator['v_drop'] = max(v) - min(v) > st.session_state.get('low_v_diff_tm', 2.0)
         indikator['cos_phi_kecil'] = any([
-            row.get(f'POWER_FACTOR_L{i}', 1) < param.get('cos_phi_tm', 0.4)
+            row.get(f'POWER_FACTOR_L{i}', 1) < st.session_state.get('cos_phi_tm', 0.4)
             for i in range(1, 4)
         ])
         indikator['active_power_negative'] = any([
@@ -254,33 +223,18 @@ with tab2:
             for i in range(1, 4)
         ])
         indikator['arus_kecil_teg_kecil'] = all([
-            all([
-                row['CURRENT_L1'] < 1,
-                row['CURRENT_L2'] < 1,
-                row['CURRENT_L3'] < 1
-            ]),
-            all([
-                row['VOLTAGE_L1'] < 180,
-                row['VOLTAGE_L2'] < 180,
-                row['VOLTAGE_L3'] < 180
-            ]),
-            any([
-                row.get(f'ACTIVE_POWER_L{i}', 0) > 10
-                for i in range(1, 4)
-            ])
+            all([row['CURRENT_L1'] < 1, row['CURRENT_L2'] < 1, row['CURRENT_L3'] < 1]),
+            all([row['VOLTAGE_L1'] < 180, row['VOLTAGE_L2'] < 180, row['VOLTAGE_L3'] < 180]),
+            any([row.get(f'ACTIVE_POWER_L{i}', 0) > 10 for i in range(1, 4)])
         ])
         arus = [row['CURRENT_L1'], row['CURRENT_L2'], row['CURRENT_L3']]
         max_i, min_i = max(arus), min(arus)
-        indikator['unbalance_I'] = (max_i - min_i) / max_i > param.get('unbal_tol_tm', 0.5) if max_i > 0 else False
-        indikator['v_lost'] = (
-            row.get('VOLTAGE_L1', 0) == 0 or
-            row.get('VOLTAGE_L2', 0) == 0 or
-            row.get('VOLTAGE_L3', 0) == 0
-        )
+        indikator['unbalance_I'] = (max_i - min_i) / max_i > st.session_state.get('unbal_tol_tm', 0.5) if max_i > 0 else False
+        indikator['v_lost'] = (row.get('VOLTAGE_L1', 0) == 0 or row.get('VOLTAGE_L2', 0) == 0 or row.get('VOLTAGE_L3', 0) == 0)
         indikator['In_more_Imax'] = any([
-            row['CURRENT_L1'] > param.get('max_i_tm', 1.0),
-            row['CURRENT_L2'] > param.get('max_i_tm', 1.0),
-            row['CURRENT_L3'] > param.get('max_i_tm', 1.0)
+            row['CURRENT_L1'] > st.session_state.get('max_i_tm', 1.0),
+            row['CURRENT_L2'] > st.session_state.get('max_i_tm', 1.0),
+            row['CURRENT_L3'] > st.session_state.get('max_i_tm', 1.0)
         ])
         indikator['active_power_negative_siang'] = row.get('ACTIVE_POWER_SIANG', 0) < 0
         indikator['active_power_negative_malam'] = row.get('ACTIVE_POWER_MALAM', 0) < 0
@@ -292,27 +246,40 @@ with tab2:
         indikator['current_loop'] = row.get('CURRENT_LOOP', 0) == 1
         indikator['freeze'] = row.get('FREEZE', 0) == 1
         return indikator
-    # ------------------ Navigasi ------------------ #
-    tab1, tab2 = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
 
-    
-# ------------------ Tab 1: Data Historis ------------------ #
-    with tab1:
-        data_path = "data_harian.csv"
+    # ------------------ Sub Tabs ------------------ #
+    sub_data, sub_upload = st.tabs(["📂 Data Historis", "➕ Upload Data Baru"])
+
+    # ------------------ Data Historis ------------------ #
+    with sub_data:
         if os.path.exists(data_path):
             df = pd.read_csv(data_path)
 
-            df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
-
-            indikator_list = df.apply(cek_indikator, axis=1)
-            indikator_df = pd.DataFrame(indikator_list.tolist())
-            indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
+            # --- Normalisasi dasar ---
+            df = df.dropna(subset=['LOCATION_CODE']).copy()
+            df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
 
             # Tambahkan kolom pelanggan jika tidak ada
-            for col in ['NAMA', 'ALAMAT', 'TARIF', 'DAYA']:
+            for col in ['NAMA_PELANGGAN', 'TARIFF', 'POWER']:
                 if col not in df.columns:
                     df[col] = "-"
 
+            # Hitung jumlah kemunculan per IDPEL (untuk informasi 'Jumlah Berulang')
+            df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
+
+            # Hitung indikator per baris
+            indikator_list = df.apply(cek_indikator, axis=1)
+            indikator_df = pd.DataFrame(indikator_list.tolist())
+            indikator_df['LOCATION_CODE'] = df['LOCATION_CODE']
+            indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
+
+            # Agregasi indikator per LOCATION_CODE (OR/any)
+            boolean_cols = [c for c in indikator_df.columns if c not in ['LOCATION_CODE', 'Jumlah Berulang']]
+            agg_dict = {c: 'any' for c in boolean_cols}
+            agg_dict['Jumlah Berulang'] = 'max'
+            indikator_agg = indikator_df.groupby('LOCATION_CODE', as_index=False).agg(agg_dict)
+
+            # Bobot & skor
             indikator_bobot = {
                 'arus_hilang': 2, 'over_current': 1, 'over_voltage': 1, 'v_drop': 1,
                 'cos_phi_kecil': 1, 'active_power_negative': 2, 'arus_kecil_teg_kecil': 1,
@@ -320,33 +287,44 @@ with tab2:
                 'active_power_negative_siang': 2, 'active_power_negative_malam': 2,
                 'active_p_lost': 2, 'current_loop': 2, 'freeze': 2
             }
+            indikator_agg['Jumlah Indikator'] = indikator_agg[boolean_cols].sum(axis=1)
 
-            
-            # Ambil info pelanggan dari data terbaru per LOCATION_CODE
+            def hitung_skor(row):
+                s = 0
+                for k, w in indikator_bobot.items():
+                    if k in row and bool(row[k]):
+                        s += w
+                return s
+            indikator_agg['Skor'] = indikator_agg.apply(hitung_skor, axis=1)
+
+            # Info pelanggan terbaru per LOCATION_CODE
             if 'TANGGAL' in df.columns:
                 df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
                 df_info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
             else:
                 df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
 
-            df_info = df_info[['LOCATION_CODE', 'NAMA_PELANGGAN', 'TARIFF', 'POWER']].rename(
+            df_info = df_info[['LOCATION_CODE', 'NAMA_PELANGGAN', 'TARIF' if 'TARIF' in df_info.columns else 'TARIFF', 'POWER']].rename(
                 columns={'NAMA_PELANGGAN': 'NAMA', 'TARIFF': 'TARIF', 'POWER': 'DAYA'}
             )
+            if 'TARIF' not in df_info.columns:
+                df_info['TARIF'] = '-'  # fallback kalau kolom tariff tidak ada
 
+            # Merge rapi
+            result = df_info.merge(indikator_agg, on='LOCATION_CODE', how='right')
+            for c in ['NAMA', 'TARIF', 'DAYA']:
+                if c in result.columns:
+                    result[c] = result[c].fillna('-')
 
-            indikator_df['Jumlah Indikator'] = indikator_df.sum(axis=1)
-            indikator_df['Skor'] = indikator_df.apply(lambda row: sum(indikator_bobot.get(col, 1) for col in indikator_bobot if row[col]), axis=1)
-
-            df_merge = df_info[['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA']].copy()
-            result = pd.concat([df_merge.reset_index(drop=True), indikator_df.reset_index(drop=True)], axis=1)
-
-            top50 = result.sort_values(by='Skor', ascending=False).head(50)
+            # Tampilkan
+            top_limit = st.session_state.get('top_limit', 50)
+            top50 = result.sort_values(by='Skor', ascending=False).head(top_limit)
 
             col1, col2, col3 = st.columns([1.2, 1.2, 1])
-            col1.metric("📄 Total Data", len(df))
-            col3.metric("🎯 Pelanggan Potensial TO", len(result[result['Skor'] > 0]))
-            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
+            col1.metric("📄 Total Record Histori", len(df))
+            col3.metric("🎯 Pelanggan Potensial TO", int((result['Skor'] > 0).sum()))
 
+            st.subheader("🏆 Top 50 Rekomendasi Target Operasi")
             st.download_button(
                 label="📥 Download Hasil Lengkap (Excel)",
                 data=result.to_csv(index=False).encode('utf-8'),
@@ -354,23 +332,24 @@ with tab2:
                 mime="text/csv"
             )
 
-            st.dataframe(
-                top50[['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA'] + list(indikator_bobot.keys()) + ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']],
-                use_container_width=True,
-                height=600
-            )
+            kolom_tampil = ['LOCATION_CODE', 'NAMA', 'TARIF', 'DAYA'] + \
+                           [k for k in indikator_bobot.keys() if k in result.columns] + \
+                           ['Jumlah Berulang', 'Jumlah Indikator', 'Skor']
+            st.dataframe(top50[kolom_tampil], use_container_width=True, height=600)
 
-            st.subheader("📈 Visualisasi Indikator Anomali")
-            indikator_counts = indikator_df.drop(columns='Jumlah Berulang').sum().sort_values(ascending=False).reset_index()
+            # Visualisasi
+            indikator_counts = indikator_agg[[c for c in indikator_bobot.keys() if c in indikator_agg.columns]].sum().sort_values(ascending=False).reset_index()
             indikator_counts.columns = ['Indikator', 'Jumlah']
             fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
             st.plotly_chart(fig, use_container_width=True)
+
+            # ML
             with st.expander("🤖 Prediksi TO dengan Machine Learning"):
                 if st.button("🔍 Jalankan Prediksi TO (ML)"):
                     df_ml = detect_to_ml(df)
                     hasil_ml = df_ml[df_ml["TO_PRED"] == 1].copy()
                     st.metric("Jumlah Pelanggan Terindikasi TO (ML)", len(hasil_ml))
-                    st.dataframe(hasil_ml[["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF", "POWER", "TO_PRED", "anomaly_score"]].head(100), use_container_width=True)
+                    st.dataframe(hasil_ml[["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF" if "TARIFF" in hasil_ml.columns else "TARIF", "POWER", "TO_PRED", "anomaly_score"]].head(100), use_container_width=True)
                     st.download_button(
                         label="📥 Download Hasil Deteksi ML",
                         data=hasil_ml.to_csv(index=False).encode(),
@@ -378,6 +357,7 @@ with tab2:
                         mime="text/csv"
                     )
 
+            # Similarity
             with st.expander("🧬 Analisa Kemiripan Pelanggan dengan TO Terbukti"):
                 idpel_input = st.text_input("Masukkan IDPEL Pelanggan yang Terbukti TO")
                 if st.button("🔍 Cari Pelanggan Mirip"):
@@ -385,7 +365,9 @@ with tab2:
                         hasil_mirip = cari_pelanggan_mirip(df, idpel_input)
                         if not hasil_mirip.empty:
                             st.metric("Pelanggan Mirip Ditemukan", len(hasil_mirip))
-                            st.dataframe(hasil_mirip[["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF", "POWER", "Distance"]].head(20), use_container_width=True)
+                            view_cols = ["LOCATION_CODE", "NAMA_PELANGGAN", "TARIFF" if "TARIFF" in hasil_mirip.columns else "TARIF", "POWER", "Distance"]
+                            view_cols = [c for c in view_cols if c in hasil_mirip.columns]
+                            st.dataframe(hasil_mirip[view_cols].head(20), use_container_width=True)
                             st.download_button(
                                 label="📥 Download Hasil Kemiripan",
                                 data=hasil_mirip.to_csv(index=False).encode(),
@@ -396,11 +378,11 @@ with tab2:
                             st.warning("IDPEL tidak ditemukan di data.")
                     else:
                         st.warning("Silakan masukkan IDPEL yang valid.")
-
         else:
             st.warning("Belum ada data historis. Silakan upload pada tab berikutnya.")
-# ------------------ Upload Data ------------------  ------------------ #
-    with tab2:
+
+    # ------------------ Upload Data ------------------ #
+    with sub_upload:
         uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
         if uploaded_file:
             df = pd.read_excel(uploaded_file, sheet_name=0)
@@ -423,11 +405,24 @@ with tab2:
             df.to_csv(data_path, index=False)
             st.success("Data berhasil ditambahkan ke histori.")
 
+        # Konfirmasi hapus
         if st.button("🗑️ Hapus Semua Data Historis"):
-            if os.path.exists(data_path):
-                os.remove(data_path)
-                st.success("Data historis berhasil dihapus.")
+            st.session_state['_confirm_del_amr'] = True
 
+        if st.session_state.get('_confirm_del_amr'):
+            st.warning("Konfirmasi penghapusan data historis AMR.")
+            col_del1, col_del2 = st.columns(2)
+            with col_del1:
+                if st.button("✅ Ya, hapus"):
+                    if os.path.exists(data_path):
+                        os.remove(data_path)
+                        st.success("Data historis berhasil dihapus.")
+                    st.session_state['_confirm_del_amr'] = False
+            with col_del2:
+                if st.button("❌ Batal"):
+                    st.session_state['_confirm_del_amr'] = False
+
+# ------------------ Tab Pascabayar ------------------ #
 with tab_pasca:
     st.title("📊 Dashboard Target Operasi Pascabayar")
     st.markdown("---")
@@ -449,11 +444,21 @@ with tab_pasca:
         except Exception as e:
             st.error(f"Gagal memproses file: {e}")
 
+    # Konfirmasi hapus OLAP
     if st.button("🗑 Hapus Histori OLAP Pascabayar"):
-        if os.path.exists(olap_path):
-            if st.confirm("Apakah Anda yakin ingin menghapus seluruh histori OLAP Pascabayar?"):
-                os.remove(olap_path)
-                st.success("Histori OLAP berhasil dihapus.")
+        st.session_state['_confirm_del_olap'] = True
+    if st.session_state.get('_confirm_del_olap'):
+        st.warning("Konfirmasi penghapusan histori OLAP Pascabayar.")
+        colx, coly = st.columns(2)
+        with colx:
+            if st.button("✅ Ya, hapus OLAP"):
+                if os.path.exists(olap_path):
+                    os.remove(olap_path)
+                    st.success("Histori OLAP berhasil dihapus.")
+                st.session_state['_confirm_del_olap'] = False
+        with coly:
+            if st.button("❌ Batal"):
+                st.session_state['_confirm_del_olap'] = False
 
     if os.path.exists(olap_path):
         df = pd.read_csv(olap_path)
@@ -463,7 +468,6 @@ with tab_pasca:
 
         # Input nilai penurunan terlebih dahulu
         drop_threshold = st.number_input("Penurunan Pemakaian kWh 3 Bulan Terakhir (%)", value=30, min_value=0, max_value=100, step=1)
-        # Checkbox untuk mengaktifkan filter
         use_drop_threshold = st.checkbox("Aktifkan Filter Penurunan Pemakaian kWh", value=False)
 
         selected_idpel = st.selectbox(
@@ -471,7 +475,6 @@ with tab_pasca:
             ["Semua"] + sorted(df["IDPEL"].astype(str).unique().tolist())
         )
 
-        # Filter dataframe berdasarkan selected_idpel dan penurunan kWh
         if selected_idpel != "Semua":
             df_temp = df[df["IDPEL"].astype(str) == selected_idpel].copy()
             if use_drop_threshold and len(df_temp) >= 3:
@@ -480,14 +483,14 @@ with tab_pasca:
                 previous = df_temp.tail(len(df_temp)-3)["PEMKWH"].mean() if len(df_temp) > 3 else df_temp["PEMKWH"].mean()
                 if previous > 0:
                     drop_percent = ((previous - recent_3) / previous) * 100
-                    if drop_percent < drop_threshold:  # Kosongkan jika penurunan < threshold
+                    if drop_percent < drop_threshold:
                         df_filtered = pd.DataFrame()
                     else:
                         df_filtered = df_temp
                 else:
-                    df_filtered = df_temp  # Jika previous = 0, tampilkan semua
+                    df_filtered = df_temp
             else:
-                df_filtered = df_temp  # Jika tidak menggunakan threshold atau data < 3 bulan
+                df_filtered = df_temp
         else:
             df_filtered = df.copy()
 
@@ -499,20 +502,15 @@ with tab_pasca:
             df_pivot_jam = df_filtered.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="mean")
             st.dataframe(df_pivot_jam, use_container_width=True)
 
-        # Riwayat Konsumsi dan Grafik Konsumsi KWH Bulanan
-        if selected_idpel != "Semua" and len(df_filtered) == 1:
+        if selected_idpel != "Semua" and not df_filtered.empty:
             st.subheader(f"📈 Riwayat Konsumsi Pelanggan {selected_idpel}")
             df_idpel = df[df["IDPEL"].astype(str) == selected_idpel].sort_values("THBLREK")
-            # Tangani data kosong atau hilang
             df_idpel = df_idpel.dropna(subset=["THBLREK", "PEMKWH"])
             if df_idpel.empty:
                 st.warning("Tidak ada data konsumsi untuk IDPEL yang dipilih.")
             else:
-                # Perbaiki format tanggal
                 df_idpel["THBLREK"] = pd.to_datetime(df_idpel["THBLREK"], format="%Y%m").dt.strftime("%b %Y")
-                # Tambahkan rata-rata bergerak
                 df_idpel["Moving_Avg"] = df_idpel["PEMKWH"].rolling(window=3, min_periods=1).mean()
-                # Tambahkan label dan skala yang jelas
                 fig_line = px.line(df_idpel, x="THBLREK", y=["PEMKWH", "Moving_Avg"], title="Grafik Konsumsi KWH Bulanan",
                                   labels={"THBLREK": "Bulan", "value": "Konsumsi kWh (kWh)", "variable": "Metrik"},
                                   hover_data=["NAMA", "ALAMAT"])
@@ -563,8 +561,9 @@ with tab_pasca:
         st.download_button("📄 Download Target Operasi Pascabayar", df_to.to_csv(index=False).encode(), file_name="target_operasi_pascabayar.csv", mime="text/csv")
 
     else:
-        df = pd.DataFrame()
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
+
+# ------------------ Tab Prabayar ------------------ #
 with tab_prabayar:
     st.title("📊 Dashboard Target Operasi Prabayar")
     st.markdown("---")
