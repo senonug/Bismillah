@@ -2,21 +2,24 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import os
+import os, pickle
 import plotly.express as px
+from datetime import datetime
 
-from sklearn.ensemble import IsolationForest
+from sklearn.ensemble import IsolationForest, RandomForestClassifier
 from sklearn.preprocessing import RobustScaler, StandardScaler
-from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.inspection import permutation_importance
 
-# ===================== Helpers & Config ===================== #
-
+# ===================== App Config ===================== #
 st.set_page_config(page_title="T-Energy", layout="wide", page_icon="⚡")
 
-DATA_PATH_AMR = "data_harian.csv"
-DATA_PATH_OLAP = "olap_pascabayar.csv"
+DATA_PATH_AMR   = "data_harian.csv"
+DATA_PATH_OLAP  = "olap_pascabayar.csv"
+LABELS_STORE    = "labels_store.csv"     # simpan label hasil lapangan
+MODEL_STORE     = "model_rf.pkl"         # simpan model supervised
 
-# ---------- Caching ---------- #
+# ===================== Helpers & Cache ===================== #
 @st.cache_data(show_spinner=False)
 def load_csv_safe(path: str) -> pd.DataFrame:
     if os.path.exists(path):
@@ -26,10 +29,40 @@ def load_csv_safe(path: str) -> pd.DataFrame:
             return pd.DataFrame()
     return pd.DataFrame()
 
+@st.cache_data(show_spinner=False)
+def load_labels_store(path: str = LABELS_STORE) -> pd.DataFrame:
+    if os.path.exists(path):
+        try:
+            df = pd.read_csv(path)
+            if 'TANGGAL_INSPEKSI' in df.columns:
+                df['TANGGAL_INSPEKSI'] = pd.to_datetime(df['TANGGAL_INSPEKSI'], errors='coerce')
+            return df
+        except Exception:
+            return pd.DataFrame(columns=['LOCATION_CODE','TANGGAL_INSPEKSI','LABEL_TO'])
+    else:
+        return pd.DataFrame(columns=['LOCATION_CODE','TANGGAL_INSPEKSI','LABEL_TO'])
+
+def save_labels_to_store(new_labels: pd.DataFrame, path: str = LABELS_STORE) -> pd.DataFrame:
+    """Gabungkan label baru ke store, anti-duplikat (LOCATION_CODE + TANGGAL_INSPEKSI)."""
+    store = load_labels_store(path)
+    keep_cols = ['LOCATION_CODE','TANGGAL_INSPEKSI','LABEL_TO']
+    for c in keep_cols:
+        if c not in new_labels.columns:
+            new_labels[c] = np.nan
+    new_labels = new_labels[keep_cols].copy()
+    new_labels['LOCATION_CODE'] = new_labels['LOCATION_CODE'].astype(str).str.strip()
+    new_labels['TANGGAL_INSPEKSI'] = pd.to_datetime(new_labels['TANGGAL_INSPEKSI'], errors='coerce')
+    new_labels['LABEL_TO'] = pd.to_numeric(new_labels['LABEL_TO'], errors='coerce').astype('Int64')
+    new_labels = new_labels.dropna(subset=['LOCATION_CODE','TANGGAL_INSPEKSI','LABEL_TO'])
+
+    all_lab = pd.concat([store, new_labels], ignore_index=True)
+    all_lab = all_lab.drop_duplicates(subset=['LOCATION_CODE','TANGGAL_INSPEKSI']).reset_index(drop=True)
+    all_lab.to_csv(path, index=False)
+    load_labels_store.clear()
+    return all_lab
+
 def _filter_customer_only(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep only LOCATION_TYPE == 'Customer' or 'COSTUMER' (case-insensitive)."""
     if 'LOCATION_TYPE' not in df.columns:
-        st.warning("Kolom LOCATION_TYPE tidak ditemukan. Tidak dapat memfilter ke Customer saja.")
         return df
     lt = df['LOCATION_TYPE'].astype(str).str.strip().str.lower()
     allowed = {'customer', 'costumer'}
@@ -49,7 +82,16 @@ def _numericize(df: pd.DataFrame, cols: list) -> pd.DataFrame:
             df[c] = 0.0
     return df
 
-# ---------- ML utilities ---------- #
+def _ensure_date_col(df: pd.DataFrame, target_col: str = "TANGGAL") -> pd.DataFrame:
+    """Pastikan df punya kolom datetime 'TANGGAL'. Jika tidak ada, dan ada 'READ_DATE', pakai itu."""
+    df = df.copy()
+    if target_col in df.columns:
+        df[target_col] = pd.to_datetime(df[target_col], errors='coerce')
+    elif 'READ_DATE' in df.columns:
+        df[target_col] = pd.to_datetime(df['READ_DATE'], errors='coerce')
+    return df
+
+# ---------- Threshold indicator logic ---------- #
 FITUR_TEKNIS = [
     "CURRENT_L1","CURRENT_L2","CURRENT_L3",
     "VOLTAGE_L1","VOLTAGE_L2","VOLTAGE_L3",
@@ -59,73 +101,6 @@ FITUR_TEKNIS = [
     "CURRENT_LOOP","FREEZE"
 ]
 
-def robust_zscores(X: np.ndarray) -> np.ndarray:
-    """Robust Z using median and MAD."""
-    med = np.median(X, axis=0)
-    mad = np.median(np.abs(X - med), axis=0)
-    mad_safe = np.where(mad==0, 1.0, mad)
-    z = (X - med) / (1.4826 * mad_safe)  # consistency constant for normal
-    return z
-
-def top_feature_reasons(X: np.ndarray, feat_names: list, k: int = 3) -> list:
-    z = robust_zscores(X)
-    reasons = []
-    for i in range(z.shape[0]):
-        idx = np.argsort(-np.abs(z[i]))[:k]
-        tags = []
-        for j in idx:
-            arrow = "↑" if z[i, j] > 0 else "↓"
-            tags.append(f"{feat_names[j]}{arrow}")
-        reasons.append(", ".join(tags))
-    return reasons
-
-def aggregate_features(df: pd.DataFrame, how: str = "median") -> pd.DataFrame:
-    """Aggregate per LOCATION_CODE into one row per IDPEL, including features & last info cols."""
-    # numeric features
-    df_feat = _numericize(df.copy(), FITUR_TEKNIS)
-    how = how.lower()
-    if how == "mean":
-        aggfun = "mean"
-    elif how == "p95":
-        aggfun = lambda x: np.percentile(x, 95)
-    else:
-        aggfun = "median"
-    feat_agg = df_feat.groupby("LOCATION_CODE")[FITUR_TEKNIS].agg(aggfun).reset_index()
-
-    # latest info row per IDPEL
-    if 'TANGGAL' in df.columns:
-        df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
-        info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
-    else:
-        info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
-    # map tariff/power/nama
-    pick_cols = ["LOCATION_CODE"]
-    if "NAMA_PELANGGAN" in info.columns:
-        pick_cols.append("NAMA_PELANGGAN")
-    if "TARIF" in info.columns:
-        pick_cols.append("TARIF")
-    elif "TARIFF" in info.columns:
-        pick_cols.append("TARIFF")
-    if "POWER" in info.columns:
-        pick_cols.append("POWER")
-    info = info[pick_cols].copy()
-    info = info.rename(columns={"NAMA_PELANGGAN": "NAMA", "TARIFF": "TARIF", "POWER": "DAYA"})
-    if "TARIF" not in info.columns:
-        info["TARIF"] = "-"
-    if "DAYA" not in info.columns:
-        info["DAYA"] = "-"
-
-    merged = feat_agg.merge(info, on="LOCATION_CODE", how="left")
-    return merged
-
-def run_iforest(X: np.ndarray, contamination: float = 0.1, random_state: int = 42):
-    model = IsolationForest(n_estimators=200, contamination=contamination, random_state=random_state)
-    model.fit(X)
-    score = model.decision_function(X)  # higher = more normal
-    label = model.predict(X)            # -1 outlier, 1 inlier
-    return model, score, label
-
-# ---------- Indicators (threshold rules) ---------- #
 def cek_indikator_row(row, session):
     indikator = {}
     indikator['arus_hilang'] = all([row['CURRENT_L1'] == 0, row['CURRENT_L2'] == 0, row['CURRENT_L3'] == 0])
@@ -141,29 +116,17 @@ def cek_indikator_row(row, session):
     ])
     v = [row['VOLTAGE_L1'], row['VOLTAGE_L2'], row['VOLTAGE_L3']]
     indikator['v_drop'] = max(v) - min(v) > session.get('low_v_diff_tm', 2.0)
-    indikator['cos_phi_kecil'] = any([row.get(f'POWER_FACTOR_L{i}', 1) < session.get('cos_phi_tm', 0.4) for i in range(1,4)])
-    indikator['active_power_negative'] = any([row.get(f'ACTIVE_POWER_L{i}', 0) < 0 for i in range(1,4)])
+    indikator['cos_phi_kecil'] = any([row.get(f'POWER_FACTOR_L{i}', 1) < session.get('cos_phi_tm', 0.4) for i in range(1, 4)])
+    indikator['active_power_negative'] = any([row.get(f'ACTIVE_POWER_L{i}', 0) < 0 for i in range(1, 4)])
     indikator['arus_kecil_teg_kecil'] = all([
         all([row['CURRENT_L1'] < 1, row['CURRENT_L2'] < 1, row['CURRENT_L3'] < 1]),
         all([row['VOLTAGE_L1'] < 180, row['VOLTAGE_L2'] < 180, row['VOLTAGE_L3'] < 180]),
-        any([row.get(f'ACTIVE_POWER_L{i}', 0) > 10 for i in range(1,4)])
+        any([row.get(f'ACTIVE_POWER_L{i}', 0) > 10 for i in range(1, 4)])
     ])
     arus = [row['CURRENT_L1'], row['CURRENT_L2'], row['CURRENT_L3']]
     max_i, min_i = max(arus), min(arus)
     indikator['unbalance_I'] = (max_i - min_i) / max_i > session.get('unbal_tol_tm', 0.5) if max_i > 0 else False
     indikator['v_lost'] = (row.get('VOLTAGE_L1', 0) == 0 or row.get('VOLTAGE_L2', 0) == 0 or row.get('VOLTAGE_L3', 0) == 0)
-    indikator['In_more_Imax'] = any([
-        row['CURRENT_L1'] > session.get('max_i_tm', 1.0),
-        row['CURRENT_L2'] > session.get('max_i_tm', 1.0),
-        row['CURRENT_L3'] > session.get('max_i_tm', 1.0)
-    ])
-    indikator['active_power_negative_siang'] = row.get('ACTIVE_POWER_SIANG', 0) < 0
-    indikator['active_power_negative_malam'] = row.get('ACTIVE_POWER_MALAM', 0) < 0
-    indikator['active_p_lost'] = (
-        row.get('ACTIVE_POWER_L1', 0) == 0 and
-        row.get('ACTIVE_POWER_L2', 0) == 0 and
-        row.get('ACTIVE_POWER_L3', 0) == 0
-    )
     indikator['current_loop'] = row.get('CURRENT_LOOP', 0) == 1
     indikator['freeze'] = row.get('FREEZE', 0) == 1
     return indikator
@@ -171,12 +134,57 @@ def cek_indikator_row(row, session):
 INDIKATOR_BOBOT = {
     'arus_hilang': 2, 'over_current': 1, 'over_voltage': 1, 'v_drop': 1,
     'cos_phi_kecil': 1, 'active_power_negative': 2, 'arus_kecil_teg_kecil': 1,
-    'unbalance_I': 1, 'v_lost': 2, 'In_more_Imax': 1,
-    'active_power_negative_siang': 2, 'active_power_negative_malam': 2,
-    'active_p_lost': 2, 'current_loop': 2, 'freeze': 2
+    'unbalance_I': 1, 'v_lost': 2, 'current_loop': 2, 'freeze': 2
 }
 
-# ===================== Auth ===================== #
+# ---------- Common ML utils ---------- #
+def robust_zscores(X: np.ndarray) -> np.ndarray:
+    med = np.median(X, axis=0)
+    mad = np.median(np.abs(X - med), axis=0)
+    mad_safe = np.where(mad==0, 1.0, mad)
+    return (X - med) / (1.4826 * mad_safe)
+
+def top_feature_reasons(X: np.ndarray, feat_names: list, k: int = 3) -> list:
+    z = robust_zscores(X)
+    reasons = []
+    for i in range(z.shape[0]):
+        idx = np.argsort(-np.abs(z[i]))[:k]
+        tags = []
+        for j in idx:
+            arrow = "↑" if z[i, j] > 0 else "↓"
+            tags.append(f"{feat_names[j]}{arrow}")
+        reasons.append(", ".join(tags))
+    return reasons
+
+def aggregate_features(df: pd.DataFrame, how: str = "median") -> pd.DataFrame:
+    df = _ensure_date_col(df)  # support READ_DATE
+    df_feat = _numericize(df.copy(), FITUR_TEKNIS)
+    how = how.lower()
+    if how == "mean":
+        aggfun = "mean"
+    elif how == "p95":
+        aggfun = lambda x: np.percentile(x, 95)
+    else:
+        aggfun = "median"
+    feat_agg = df_feat.groupby("LOCATION_CODE")[FITUR_TEKNIS].agg(aggfun).reset_index()
+
+    if 'TANGGAL' in df.columns and pd.api.types.is_datetime64_any_dtype(df['TANGGAL']):
+        info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
+    else:
+        info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
+    pick_cols = ["LOCATION_CODE"]
+    if "NAMA_PELANGGAN" in info.columns: pick_cols.append("NAMA_PELANGGAN")
+    if "TARIF" in info.columns: pick_cols.append("TARIF")
+    elif "TARIFF" in info.columns: pick_cols.append("TARIFF")
+    if "POWER" in info.columns: pick_cols.append("POWER")
+
+    info = info[pick_cols].copy().rename(columns={"NAMA_PELANGGAN":"NAMA","TARIFF":"TARIF","POWER":"DAYA"})
+    if "TARIF" not in info.columns: info["TARIF"] = "-"
+    if "DAYA" not in info.columns: info["DAYA"] = "-"
+    merged = feat_agg.merge(info, on="LOCATION_CODE", how="left")
+    return merged
+
+# ============ Auth ============ #
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
@@ -211,7 +219,7 @@ with tab_amr:
     st.title("📊 Dashboard Target Operasi AMR - P2TL")
     st.markdown("---")
 
-    # --- Parameter Threshold (dipakai di tab Threshold) --- #
+    # --- Parameter Threshold --- #
     with st.expander("⚙️ Setting Parameter Threshold"):
         colA, colB = st.columns(2)
         with colA:
@@ -263,10 +271,13 @@ with tab_amr:
         st.number_input("Jumlah Bobot ≥", key="min_weight", value=2)
         st.number_input("Banyak Data yang Ditampilkan", key="top_limit", value=50)
 
-    # Load data once (used by both sub-tabs)
+    # Load AMR once
     df_raw = load_csv_safe(DATA_PATH_AMR)
 
-    sub_threshold, sub_ml, sub_upload = st.tabs(["🔎 Deteksi Threshold", "🤖 Deteksi ML (Eksperimental)", "➕ Upload Data"])
+    # Sub-tabs: Threshold, ML Auto, Upload
+    sub_threshold, sub_ml_auto, sub_upload = st.tabs(
+        ["🔎 Deteksi Threshold", "🤖 Deteksi ML – Otomatis", "➕ Upload Data"]
+    )
 
     # --------- Sub-tab Threshold --------- #
     with sub_threshold:
@@ -278,59 +289,41 @@ with tab_amr:
             df['LOCATION_CODE'] = df['LOCATION_CODE'].astype(str).str.strip()
             df = _filter_customer_only(df)
             df = _ensure_customer_cols(df)
+            df = _ensure_date_col(df)
 
-            # Hitung jumlah kemunculan per IDPEL
             df['Jumlah Berulang'] = df.groupby('LOCATION_CODE')['LOCATION_CODE'].transform('count')
-
-            # Hitung indikator per baris
-            num_cols = list(set(FITUR_TEKNIS))
-            df = _numericize(df, num_cols)
+            df = _numericize(df, FITUR_TEKNIS)
             indikator_list = df.apply(lambda r: cek_indikator_row(r, st.session_state), axis=1)
             indikator_df = pd.DataFrame(indikator_list.tolist())
             indikator_df['LOCATION_CODE'] = df['LOCATION_CODE']
             indikator_df['Jumlah Berulang'] = df['Jumlah Berulang']
 
-            # Agregasi indikator per LOCATION_CODE (OR/any)
             boolean_cols = [c for c in indikator_df.columns if c not in ['LOCATION_CODE', 'Jumlah Berulang']]
             agg_dict = {c: 'any' for c in boolean_cols}
             agg_dict['Jumlah Berulang'] = 'max'
             indikator_agg = indikator_df.groupby('LOCATION_CODE', as_index=False).agg(agg_dict)
 
-            # Bobot & skor
             indikator_agg['Jumlah Indikator'] = indikator_agg[boolean_cols].sum(axis=1)
-            def hitung_skor(row):
-                s = 0
-                for k, w in INDIKATOR_BOBOT.items():
-                    if k in row and bool(row[k]):
-                        s += w
-                return s
-            indikator_agg['Skor'] = indikator_agg.apply(hitung_skor, axis=1)
+            indikator_agg['Skor'] = indikator_agg.apply(lambda row: sum(INDIKATOR_BOBOT[k] for k in INDIKATOR_BOBOT.keys() if k in row and bool(row[k])), axis=1)
 
-            # Info pelanggan terbaru per LOCATION_CODE
-            if 'TANGGAL' in df.columns:
-                df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
+            if 'TANGGAL' in df.columns and pd.api.types.is_datetime64_any_dtype(df['TANGGAL']):
                 df_info = df.sort_values('TANGGAL').dropna(subset=['TANGGAL']).groupby('LOCATION_CODE').tail(1)
             else:
                 df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
 
-            # Konsistensi nama kolom
-            if 'TARIF' in df_info.columns:
-                tarif_col = 'TARIF'
-            else:
-                tarif_col = 'TARIFF' if 'TARIFF' in df_info.columns else None
+            if 'TARIF' in df_info.columns: tarif_col = 'TARIF'
+            else: tarif_col = 'TARIFF' if 'TARIFF' in df_info.columns else None
             use_cols = ['LOCATION_CODE', 'NAMA_PELANGGAN'] + ([tarif_col] if tarif_col else []) + ['POWER']
-            df_info = df_info[use_cols].rename(columns={'NAMA_PELANGGAN': 'NAMA','TARIFF':'TARIF','POWER':'DAYA'})
+            df_info = df_info[use_cols].rename(columns={'NAMA_PELANGGAN': 'NAMA', 'TARIFF': 'TARIF', 'POWER': 'DAYA'})
             if 'TARIF' not in df_info.columns: df_info['TARIF'] = '-'
             if 'DAYA' not in df_info.columns: df_info['DAYA'] = '-'
 
             result = df_info.merge(indikator_agg, on='LOCATION_CODE', how='right')
-            for c in ['NAMA','TARIF','DAYA']:
+            for c in ['NAMA', 'TARIF', 'DAYA']:
                 if c in result.columns: result[c] = result[c].fillna('-')
 
             top_limit = st.session_state.get('top_limit', 50)
-            top50 = (result.drop_duplicates(subset='LOCATION_CODE')
-                            .sort_values(by='Skor', ascending=False)
-                            .head(top_limit))
+            top50 = (result.drop_duplicates(subset='LOCATION_CODE').sort_values(by='Skor', ascending=False).head(top_limit))
 
             col1, col2, col3 = st.columns([1.2,1.2,1])
             col1.metric("📄 Total Record (Customer)", len(df))
@@ -341,17 +334,12 @@ with tab_amr:
                                data=result.to_csv(index=False).encode('utf-8'),
                                file_name="hasil_target_operasi_amr.csv",
                                mime="text/csv")
-            kolom_tampil = ['LOCATION_CODE','NAMA','TARIF','DAYA'] + \
-                           [k for k in INDIKATOR_BOBOT.keys() if k in result.columns] + \
-                           ['Jumlah Berulang','Jumlah Indikator','Skor']
+            kolom_tampil = ['LOCATION_CODE','NAMA','TARIF','DAYA'] + [k for k in INDIKATOR_BOBOT.keys() if k in result.columns] + ['Jumlah Berulang','Jumlah Indikator','Skor']
             st.dataframe(top50[kolom_tampil], use_container_width=True, height=520)
 
-            # Visualisasi indikator per-ID
             indikator_counts = indikator_agg[[c for c in INDIKATOR_BOBOT.keys() if c in indikator_agg.columns]].sum().sort_values(ascending=False).reset_index()
             indikator_counts.columns = ['Indikator','Jumlah']
             fig = px.bar(indikator_counts, x='Indikator', y='Jumlah', text='Jumlah', color='Indikator')
-
-            # Interaksional: klik bar (butuh streamlit-plotly-events); fallback dropdown
             selected_indicator = None
             try:
                 from streamlit_plotly_events import plotly_events  # type: ignore
@@ -366,8 +354,8 @@ with tab_amr:
 
             if selected_indicator:
                 if selected_indicator in indikator_agg.columns:
-                    id_list = indikator_agg.loc[indikator_agg[selected_indicator] == True, "LOCATION_CODE"].astype(str).unique().tolist()
-                    detail_df = result[result["LOCATION_CODE"].astype(str).isin(id_list)][["LOCATION_CODE","NAMA","TARIF","DAYA"]].drop_duplicates(subset="LOCATION_CODE")
+                    id_list = indikator_agg.loc[indikator_agg[selected_indicator] == True, 'LOCATION_CODE'].astype(str).unique().tolist()
+                    detail_df = result[result['LOCATION_CODE'].astype(str).isin(id_list)][['LOCATION_CODE','NAMA','TARIF','DAYA']].drop_duplicates(subset='LOCATION_CODE')
                     st.subheader(f"📋 Daftar IDPEL untuk indikator: **{selected_indicator}** (unik: {len(detail_df)})")
                     st.dataframe(detail_df, use_container_width=True, height=400)
                     st.download_button("📥 Download daftar IDPEL (CSV)",
@@ -377,9 +365,10 @@ with tab_amr:
                 else:
                     st.warning("Indikator tidak ditemukan di data.")
 
-    # --------- Sub-tab ML (Eksperimental) --------- #
-    with sub_ml:
-        st.info("ML mencari pola tak biasa (outlier) pada data **Customer**. Gunakan sebagai pendukung, bukan pengganti inspeksi lapangan.")
+    # --------- Sub-tab ML – Otomatis dengan Penyimpanan Persisten --------- #
+    with sub_ml_auto:
+        st.info("Mode otomatis: Tanpa label → anomali. Jika Anda unggah label, sistem melatih supervised dan menyimpan model agar 'terus belajar'.")
+
         if df_raw.empty:
             st.warning("Belum ada data historis. Silakan upload pada tab 'Upload Data'.")
         else:
@@ -389,106 +378,254 @@ with tab_amr:
             df = _filter_customer_only(df)
             df = _ensure_customer_cols(df)
             df = _numericize(df, FITUR_TEKNIS)
+            df = _ensure_date_col(df)
 
-            # Langkah 1 — Data & Agregasi
-            st.markdown("### Langkah 1 – Data & Agregasi")
-            unit_opt = st.radio("Unit analisis", ["Per IDPEL (agregat)", "Per baris histori"], horizontal=True, index=0)
-            agg_opt = None
+            colL, colR = st.columns([1,1])
+            with colL:
+                if "TARIF" not in df.columns and "TARIFF" in df.columns: df["TARIF"] = df["TARIFF"]
+                tarif_vals = sorted([t for t in df["TARIF"].astype(str).str.upper().unique() if t != "-"])
+                prefixes = sorted(list(set([t[:1] for t in tarif_vals if len(t)>0])))
+                pilih_prefix = st.multiselect("Prefix Tarif", options=prefixes, default=[])
+            with colR:
+                if "POWER" in df.columns:
+                    daya_num = pd.to_numeric(df["POWER"], errors="coerce")
+                    dmin = int(np.nanmin(daya_num)) if not np.isnan(daya_num.min()) else 0
+                    dmax = int(np.nanmax(daya_num)) if not np.isnan(daya_num.max()) else 10000
+                else:
+                    dmin, dmax = 0, 10000
+                range_daya = st.slider("Rentang Daya (VA)", min_value=int(dmin), max_value=int(max(dmax, dmin+1)), value=(int(dmin), int(max(dmin+1000, min(dmax, dmin+5000)))))
+
+            seg_df = df.copy()
+            if len(pilih_prefix) > 0 dan "TARIF" in seg_df.columns:
+                seg_df = seg_df[seg_df["TARIF"].astype(str).str.upper().str.startswith(tuple(pilih_prefix))]
+            if "POWER" in seg_df.columns:
+                pn = pd.to_numeric(seg_df["POWER"], errors="coerce").fillna(0)
+                seg_df = seg_df[(pn >= range_daya[0]) & (pn <= range_daya[1])]
+
+            st.caption(f"Segmen aktif → Baris historis: {len(seg_df):,} • IDPEL unik: {seg_df['LOCATION_CODE'].nunique():,}")
+
+            st.markdown("### Unit Analisis")
+            unit_opt = st.radio("Pilih unit", ["Per IDPEL (agregat)", "Per baris histori"], horizontal=True, index=0)
             if unit_opt == "Per IDPEL (agregat)":
-                agg_opt = st.selectbox("Metode agregasi fitur per IDPEL", ["median", "mean", "p95"], index=0, help="Median disarankan (lebih stabil).")
-                df_ml = aggregate_features(df, how=agg_opt)
+                agg_opt = st.selectbox("Metode agregasi fitur per IDPEL", ["median", "mean", "p95"], index=0)
+                df_ml = aggregate_features(seg_df, how=agg_opt)
             else:
-                # per baris histori: keep features as-is + info cols
                 info_cols = []
-                if "NAMA_PELANGGAN" in df.columns: info_cols.append("NAMA_PELANGGAN")
-                if "TARIF" in df.columns: info_cols.append("TARIF")
-                elif "TARIFF" in df.columns: info_cols.append("TARIFF")
-                if "POWER" in df.columns: info_cols.append("POWER")
-                df_ml = df[["LOCATION_CODE"] + FITUR_TEKNIS + info_cols].copy()
+                if "NAMA_PELANGGAN" in seg_df.columns: info_cols.append("NAMA_PELANGGAN")
+                if "TARIF" in seg_df.columns: info_cols.append("TARIF")
+                elif "TARIFF" in seg_df.columns: info_cols.append("TARIFF")
+                if "POWER" in seg_df.columns: info_cols.append("POWER")
+                df_ml = seg_df[["LOCATION_CODE"] + FITUR_TEKNIS + info_cols].copy()
                 df_ml = df_ml.rename(columns={"NAMA_PELANGGAN":"NAMA","TARIFF":"TARIF","POWER":"DAYA"})
                 if "TARIF" not in df_ml.columns: df_ml["TARIF"] = "-"
                 if "DAYA" not in df_ml.columns: df_ml["DAYA"] = "-"
 
-            st.caption(f"Data: Customer saja • Baris analisis: {len(df_ml):,} • Fitur: {len(FITUR_TEKNIS)}")
+            st.caption(f"Baris analisis: {len(df_ml):,} • Fitur: {len(FITUR_TEKNIS)}")
 
-            # Langkah 2 — Parameter sederhana
-            st.markdown("### Langkah 2 – Parameter")
-            colp, cols, coln = st.columns([1,1,1])
+            # Parameter umum
+            colp, cols, colk = st.columns([1,1,1])
             with colp:
-                contam_pct = st.slider("Proporsi anomali (kuota investigasi) – %", min_value=1, max_value=30, value=10, step=1) / 100.0
+                contam_pct = st.slider("Proporsi anomali (%, alternatif)", min_value=1, max_value=30, value=10, step=1) / 100.0
             with cols:
                 scaler_choice = st.selectbox("Stabilisasi skala fitur", ["RobustScaler (disarankan)", "StandardScaler"], index=0)
-            with coln:
-                max_rows = st.number_input("Tampilkan maksimal (baris)", min_value=50, max_value=5000, value=300, step=50)
+            with colk:
+                topk = st.number_input("Top-K kapasitas inspeksi (prioritas)", min_value=10, max_value=10000, value=200, step=10)
 
             with st.expander("Pengaturan Lanjutan"):
                 seed = st.number_input("Random state", value=42, step=1)
                 pilih_fitur = st.multiselect("Pilih fitur ML (kosongkan = semua)", FITUR_TEKNIS, default=[])
+                window_days = st.number_input("Jendela fitur supervised (hari)", value=30, min_value=7, max_value=120, step=1)
 
             fitur_pakai = pilih_fitur if len(pilih_fitur) > 0 else FITUR_TEKNIS
             X = df_ml[fitur_pakai].values.astype(float)
-
-            # Skaler
-            if scaler_choice.startswith("Robust"):
-                scaler = RobustScaler()
-            else:
-                scaler = StandardScaler()
+            scaler = RobustScaler() if scaler_choice.startswith("Robust") else StandardScaler()
             Xs = scaler.fit_transform(X)
 
-            # Langkah 3 — Jalankan
-            st.markdown("### Langkah 3 – Hasil & Penjelasan")
-            if st.button("🚀 Jalankan Deteksi"):
-                model, score, label = run_iforest(Xs, contamination=contam_pct, random_state=seed)
-                outlier_mask = (label == -1)
+            # ====== Upload Label (opsional) ======
+            st.markdown("### (Opsional) Unggah Label / Hasil Lapangan")
+            labels_file = st.file_uploader("Label TO (CSV: LOCATION_CODE, TANGGAL_INSPEKSI, LABEL_TO)", type=["csv"], key="labels_upload_auto")
+            if labels_file is not None:
+                try:
+                    labels_new = pd.read_csv(labels_file)
+                    store_df = save_labels_to_store(labels_new)
+                    st.success(f"Label disimpan. Total label tersimpan: {len(store_df)} baris unik.")
+                except Exception as e:
+                    st.error(f"Gagal memproses label: {e}")
+
+            # Tampilkan ringkasan store & opsi
+            store_df = load_labels_store()
+            has_model = os.path.exists(MODEL_STORE)
+            cA, cB, cC = st.columns(3)
+            cA.metric("Label tersimpan", len(store_df))
+            cB.metric("Model tersimpan", "Ada ✅" if has_model else "Belum ada")
+            if not store_df.empty:
+                cC.download_button("📥 Unduh seluruh label", data=store_df.to_csv(index=False).encode('utf-8'),
+                                   file_name="labels_store.csv", mime="text/csv")
+
+            # ====== Tombol Jalankan ======
+            st.markdown("### Jalankan")
+            colU, colS1, colS2 = st.columns([1.1,1,1])
+            run_unsup = colU.button("🚀 Deteksi Tanpa Label (Anomali)")
+            train_supervised = colS1.button("🧠 Latih Ulang & Simpan Model Supervised")
+            score_with_saved = colS2.button("🎯 Skoring dengan Model Tersimpan")
+
+            # ====== Unsupervised ======
+            if run_unsup:
+                N = len(df_ml)
+                cont_from_k = max(0.001, min(0.5, topk / max(1, N)))
+                contamination = cont_from_k if topk else contam_pct
+                model = IsolationForest(n_estimators=200, contamination=contamination, random_state=seed)
+                model.fit(Xs)
+                score = model.decision_function(Xs)
+                label = model.predict(Xs)
+
                 df_res = df_ml.copy()
-                df_res["skor_anomali"] = score  # lebih kecil = lebih anomali
-                df_res["is_anomali"] = outlier_mask.astype(int)
-
-                # alasan (top 3 robust-z) — hitung pada seluruh X dan ambil utk baris outlier
-                reasons = top_feature_reasons(X, fitur_pakai, k=3)
-                df_res["alasan"] = reasons
-
-                # urutkan dari paling anomali
+                df_res["skor_anomali"] = score
+                df_res["is_anomali"] = (label == -1).astype(int)
+                df_res["alasan"] = top_feature_reasons(X, fitur_pakai, k=3)
                 df_res = df_res.sort_values("skor_anomali", ascending=True)
+                outliers = df_res[df_res["is_anomali"] == 1]
+                outliers_topk = outliers.head(min(topk, len(outliers))).copy()
 
-                # ringkasan
-                total = len(df_res)
-                jml_out = int(outlier_mask.sum())
-                st.success(f"Terpilih {jml_out:,}/{total:,} ({int(contam_pct*100)}%) kandidat investigasi.")
+                st.success(f"[Unsupervised] Kandidat investigasi: {len(outliers_topk):,} dari total {N:,}.")
+                show_cols = [c for c in ["LOCATION_CODE","NAMA","TARIF","DAYA"] if c in outliers_topk.columns] + ["skor_anomali","alasan"]
+                st.dataframe(outliers_topk[show_cols], use_container_width=True, height=520)
 
-                # kolom tampilan
-                show_cols = [c for c in ["LOCATION_CODE","NAMA","TARIF","DAYA"] if c in df_res.columns] + \
-                            ["skor_anomali","alasan"]
-                df_show = df_res[df_res["is_anomali"]==1][show_cols].head(int(max_rows))
-
-                # warna baris (opsional: gunakan dataframe biasa)
-                st.dataframe(df_show, use_container_width=True, height=520)
-
-                # simpan & unduh
-                st.download_button("📥 Download Hasil Anomali (CSV)",
-                                   df_res[df_res["is_anomali"]==1][["LOCATION_CODE","skor_anomali","alasan"] + [c for c in ["NAMA","TARIF","DAYA"] if c in df_res.columns]].to_csv(index=False).encode('utf-8'),
-                                   file_name="hasil_ml_anomali.csv",
+                plan_cols = ["LOCATION_CODE","NAMA","TARIF","DAYA","skor_anomali","alasan","TANGGAL_INSPEKSI","LABEL_TO","CATATAN","PETUGAS"]
+                plan_df = outliers_topk.copy()
+                for c in ["TANGGAL_INSPEKSI","LABEL_TO","CATATAN","PETUGAS"]: plan_df[c] = ""
+                for c in plan_cols:
+                    if c not in plan_df.columns: plan_df[c] = ""
+                st.download_button("📥 Export Inspection Plan (Top-K)",
+                                   plan_df[plan_cols].to_csv(index=False).encode("utf-8"),
+                                   file_name="inspection_plan_topk.csv",
                                    mime="text/csv")
 
-                # Daftar TO dari ML (opsional)
-                if "to_list_ml" not in st.session_state:
-                    st.session_state["to_list_ml"] = set()
-                if st.button("➕ Tambahkan baris ditampilkan ke Daftar TO (ML)"):
-                    st.session_state["to_list_ml"].update(df_show["LOCATION_CODE"].astype(str).tolist())
-                    st.success(f"Ditambahkan {len(df_show)} IDPEL ke daftar TO (ML).")
+            # Helper build supervised table
+            def build_supervised_table(df_amr: pd.DataFrame, labels_df: pd.DataFrame, window_days: int) -> pd.DataFrame:
+                feats = []
+                df_amr = _ensure_date_col(df_amr)
+                valid_ids = set(seg_df['LOCATION_CODE'].astype(str).unique().tolist())
+                for _, row in labels_df.iterrows():
+                    loc = str(row['LOCATION_CODE']).strip()
+                    if loc not in valid_ids:
+                        continue
+                    t_ins = pd.to_datetime(row['TANGGAL_INSPEKSI'], errors='coerce')
+                    if pd.isna(t_ins):
+                        continue
+                    t0 = t_ins - pd.Timedelta(days=window_days)
+                    sub = df_amr[(df_amr['LOCATION_CODE'].astype(str) == loc) & (df_amr['TANGGAL'] >= t0) & (df_amr['TANGGAL'] <= t_ins)]
+                    if len(sub) == 0:
+                        continue
+                    med = sub[FITUR_TEKNIS].median()
+                    std = sub[FITUR_TEKNIS].std().fillna(0.0)
+                    p95 = sub[FITUR_TEKNIS].quantile(0.95)
+                    feat = {f"MED_{c}": med[c] for c in FITUR_TEKNIS}
+                    feat.update({f"STD_{c}": std[c] for c in FITUR_TEKNIS})
+                    feat.update({f"P95_{c}": p95[c] for c in FITUR_TEKNIS})
+                    feat['LOCATION_CODE'] = loc
+                    feat['LABEL_TO'] = int(row['LABEL_TO'])
+                    feat['TANGGAL_INSPEKSI'] = t_ins
+                    feats.append(feat)
+                return pd.DataFrame(feats)
 
-                if st.session_state.get("to_list_ml"):
-                    list_to = sorted(list(st.session_state["to_list_ml"]))
-                    st.info(f"Daftar TO (ML) saat ini: {len(list_to)} IDPEL.")
-                    df_to_view = pd.DataFrame({"LOCATION_CODE": list_to})
-                    st.dataframe(df_to_view, use_container_width=True, height=200)
-                    st.download_button("📥 Download Daftar TO (ML)",
-                                       df_to_view.to_csv(index=False).encode('utf-8'),
-                                       file_name="daftar_to_ml.csv",
+            # ====== Train Supervised & Save Model ======
+            if train_supervised:
+                store_df = load_labels_store()
+                if store_df.empty:
+                    st.warning("Belum ada label tersimpan. Unggah label dulu.")
+                else:
+                    st.info("Mempersiapkan fitur dari label tersimpan...")
+                    sup_df = build_supervised_table(df, store_df, int(window_days))
+                    if sup_df.empty:
+                        st.error("Tidak ada fitur yang terbentuk dari label (cek kecocokan IDPEL/tanggal).")
+                    else:
+                        st.success(f"Fitur terbentuk: {len(sup_df)} baris, {sup_df.shape[1]-3} kolom fitur.")
+                        train_df = sup_df.sort_values('TANGGAL_INSPEKSI')
+                        cut_idx = max(1, int(len(train_df)*0.8))
+                        tr, va = train_df.iloc[:cut_idx], train_df.iloc[cut_idx:]
+                        feat_cols = [c for c in sup_df.columns if c not in ['LOCATION_CODE','LABEL_TO','TANGGAL_INSPEKSI']]
+                        if tr.empty or va.empty:
+                            st.error("Data train/valid kosong. Tambah label.")
+                        else:
+                            X_tr = tr[feat_cols].fillna(0.0).values; y_tr = tr['LABEL_TO'].values
+                            X_va = va[feat_cols].fillna(0.0).values; y_va = va['LABEL_TO'].values
+                            clf = RandomForestClassifier(n_estimators=350, class_weight='balanced', n_jobs=-1, random_state=42)
+                            clf.fit(X_tr, y_tr)
+                            proba = clf.predict_proba(X_va)[:,1]
+                            roc = roc_auc_score(y_va, proba) if len(np.unique(y_va))>1 else float('nan')
+                            pr  = average_precision_score(y_va, proba) if len(np.unique(y_va))>1 else float('nan')
+                            st.success(f"Model dilatih. ROC-AUC={roc:.3f}  PR-AUC={pr:.3f}")
+                            artefact = {
+                                "model": clf,
+                                "feat_cols": feat_cols,
+                                "window_days": int(window_days),
+                                "timestamp": datetime.now().isoformat(timespec='seconds'),
+                                "segment": {
+                                    "prefix": pilih_prefix,
+                                    "range_daya": list(range_daya),
+                                    "unit_opt": unit_opt
+                                }
+                            }
+                            with open(MODEL_STORE, "wb") as f:
+                                pickle.dump(artefact, f)
+                            st.success("✅ Model tersimpan ke file: {}".format(MODEL_STORE))
+
+            # ====== Score with saved model ======
+            if score_with_saved:
+                if not os.path.exists(MODEL_STORE):
+                    st.error("Belum ada model tersimpan.")
+                else:
+                    with open(MODEL_STORE, "rb") as f:
+                        artefact = pickle.load(f)
+                    feat_cols = artefact.get("feat_cols", [])
+                    wdays = int(artefact.get("window_days", 30))
+                    clf = artefact["model"]
+                    max_date = df['TANGGAL'].max()
+                    t0 = max_date - pd.Timedelta(days=wdays)
+                    recent = df[df['TANGGAL'].between(t0, max_date)].copy()
+                    med = recent.groupby('LOCATION_CODE')[FITUR_TEKNIS].median().add_prefix('MED_')
+                    std = recent.groupby('LOCATION_CODE')[FITUR_TEKNIS].std().fillna(0.0).add_prefix('STD_')
+                    p95 = recent.groupby('LOCATION_CODE')[FITUR_TEKNIS].quantile(0.95).add_prefix('P95_')
+                    feat_now = pd.concat([med, std, p95], axis=1).reset_index()
+                    for c in feat_cols:
+                        if c not in feat_now.columns: feat_now[c] = 0.0
+                    X_now = feat_now[feat_cols].fillna(0.0).values
+                    feat_now['proba_TO'] = clf.predict_proba(X_now)[:,1]
+                    info_cols = []
+                    if "NAMA_PELANGGAN" in df.columns: info_cols.append("NAMA_PELANGGAN")
+                    if "TARIF" in df.columns: info_cols.append("TARIF")
+                    elif "TARIFF" in df.columns: info_cols.append("TARIFF")
+                    if "POWER" in df.columns: info_cols.append("POWER")
+                    info = df.sort_values('TANGGAL').groupby('LOCATION_CODE').tail(1)[['LOCATION_CODE']+info_cols].copy()
+                    info = info.rename(columns={"NAMA_PELANGGAN":"NAMA","TARIFF":"TARIF","POWER":"DAYA"})
+                    if "TARIF" not in info.columns: info["TARIF"] = "-"
+                    if "DAYA" not in info.columns: info["DAYA"] = "-"
+                    feat_now = feat_now.merge(info, on='LOCATION_CODE', how='left').sort_values('proba_TO', ascending=False)
+                    topk_df = feat_now.head(int(topk))[['LOCATION_CODE','NAMA','TARIF','DAYA','proba_TO']]
+                    st.subheader("🎯 Rekomendasi Operasional (Model Tersimpan)")
+                    st.dataframe(topk_df, use_container_width=True, height=420)
+                    st.download_button("📥 Unduh Rekomendasi Operasional (Top-K)",
+                                       topk_df.to_csv(index=False).encode('utf-8'),
+                                       file_name="rekomendasi_operasional_supervised_topk.csv",
                                        mime="text/csv")
-                    if st.button("🗑️ Kosongkan Daftar TO (ML)"):
-                        st.session_state["to_list_ml"] = set()
-                        st.success("Daftar TO (ML) dikosongkan.")
+
+            st.markdown("---")
+            with st.expander("🧹 Manajemen Penyimpanan (Lanjutan)"):
+                colm1, colm2 = st.columns(2)
+                if colm1.button("Hapus labels_store.csv"):
+                    if os.path.exists(LABELS_STORE):
+                        os.remove(LABELS_STORE)
+                        load_labels_store.clear()
+                        st.success("labels_store.csv dihapus.")
+                    else:
+                        st.info("labels_store.csv belum ada.")
+                if colm2.button("Hapus model_rf.pkl"):
+                    if os.path.exists(MODEL_STORE):
+                        os.remove(MODEL_STORE)
+                        st.success("model_rf.pkl dihapus.")
+                    else:
+                        st.info("model_rf.pkl belum ada.")
 
     # --------- Sub-tab Upload --------- #
     with sub_upload:
@@ -497,6 +634,10 @@ with tab_amr:
             df_up = pd.read_excel(uploaded_file, sheet_name=0)
             df_up = df_up.dropna(subset=['LOCATION_CODE'])
             df_up['LOCATION_CODE'] = df_up['LOCATION_CODE'].astype(str).str.strip()
+            if 'TANGGAL' in df_up.columns:
+                df_up['TANGGAL'] = pd.to_datetime(df_up['TANGGAL'], errors='coerce')
+            elif 'READ_DATE' in df_up.columns:
+                df_up['TANGGAL'] = pd.to_datetime(df_up['READ_DATE'], errors='coerce')
             df_up = _filter_customer_only(df_up)
             df_up = _ensure_customer_cols(df_up)
             df_up = _numericize(df_up, FITUR_TEKNIS)
