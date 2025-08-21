@@ -396,7 +396,7 @@ with tab_amr:
                 range_daya = st.slider("Rentang Daya (VA)", min_value=int(dmin), max_value=int(max(dmax, dmin+1)), value=(int(dmin), int(max(dmin+1000, min(dmax, dmin+5000)))))
 
             seg_df = df.copy()
-            if len(pilih_prefix) > 0 dan "TARIFF" in seg_df.columns:
+            if len(pilih_prefix) > 0 dan "TARIF" in seg_df.columns:
                 seg_df = seg_df[seg_df["TARIF"].astype(str).str.upper().str.startswith(tuple(pilih_prefix))]
             if "POWER" in seg_df.columns:
                 pn = pd.to_numeric(seg_df["POWER"], errors="coerce").fillna(0)
