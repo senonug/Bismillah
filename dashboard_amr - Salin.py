@@ -394,7 +394,23 @@ with tab_amr:
                     st.info(" ; ".join(reasons))
                     hist_id = df[df['LOCATION_CODE'].astype(str)==qid_s].sort_values('TANGGAL').tail(30)
                     if not hist_id.empty:
-                        st.dataframe(hist_id[['TANGGAL','LOCATION_CODE','NAMA','TARIF','DAYA'] + [c for c in FITUR_TEKNIS if c in hist_id.columns]].tail(10), use_container_width=True)
+                        # Pastikan ada kolom TANGGAL (fallback dari READ_DATE bila perlu)
+hist_id = _ensure_date_col(hist_id)
+
+# Kumpulkan kolom identitas yang tersedia (aman untuk berbagai skema)
+ident_candidates = ['TANGGAL','LOCATION_CODE','NAMA','NAMA_PELANGGAN','TARIF','TARIFF','DAYA','POWER']
+ident_cols = [c for c in ident_candidates if c in hist_id.columns]
+
+# Kolom fitur teknis yang benar-benar ada
+fitur_list = globals().get('FITUR_TEKNIS', [])
+fitur_cols = [c for c in fitur_list if c in hist_id.columns]
+
+show_cols = ident_cols + fitur_cols
+if len(show_cols) == 0:
+    # Fallback terakhir: tampilkan 10 baris terakhir apa adanya
+    st.dataframe(hist_id.tail(10), use_container_width=True)
+else:
+    st.dataframe(hist_id[show_cols].tail(10), use_container_width=True)
 
             # === Label Lapangan Overlay (opsional) ===
             store_df = load_labels_store()
