@@ -378,27 +378,7 @@ with tab_amr:
             col3.metric("🎯 Pelanggan Potensial TO", int((result['Skor'] > 0).sum()))
 
             st.subheader("🏆 Top 50 Rekomendasi Target Operasi (unik per IDPEL)")
-            # Paket hasil AMR (Excel + data pendukung)
-sheets = {
-    "TO_Scored_All": result.drop_duplicates(subset='LOCATION_CODE').sort_values('Skor', ascending=False),
-    "TopN": top50[kolom_tampil],
-    "Per_Indikator_Aggregate": indikator_agg,
-    "Baris_Histori_Indikator": indikator_df,
-    "Info_Pelanggan_Terbaru": df_info,
-    "Ambang_Threshold": thresholds_to_df(st.session_state),
-    "Metadata": pd.DataFrame([{
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "records_customer": len(df)
-    }])
-}
-buf = to_excel_bytes(sheets)
-st.download_button("📥 Download Paket Hasil (Excel)",
-                   data=buf,
-                   file_name="hasil_target_operasi_amr.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            kolom_tampil = ['LOCATION_CODE','NAMA','TARIF','DAYA'] + \
-                           [k for k in INDIKATOR_BOBOT.keys() if k in result.columns] + \
-                           ['Jumlah Berulang','Jumlah Indikator','Skor']
+            # Kolom tampil untuk tabel utama & paket Excel
             st.dataframe(top50[kolom_tampil], use_container_width=True, height=520)
 
             # Visualisasi indikator per-ID
