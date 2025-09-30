@@ -1,7 +1,8 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
+import io
+from datetime import datetime
 import os
 import plotly.express as px
 
@@ -48,6 +49,46 @@ def _numericize(df: pd.DataFrame, cols: list) -> pd.DataFrame:
         else:
             df[c] = 0.0
     return df
+
+# ---------- Export helpers (Excel with supporting data) ---------- #
+THRESH_KEYS = [
+    "v_tm_max","v_tr_max","i_tm_min","i_tr_min","neutral_tm","neutral_tr","reverse_p_tm","reverse_p_tr","reverse_i_tm","reverse_i_tr",
+    "v_tm_zero","v_tr_zero","loss_tm_i","loss_tr_i","unbal_tol_tm","unbal_tol_tr","unbal_i_tm","unbal_i_tr","plost_i_min","cos_phi_tm",
+    "cos_phi_tr","cos_i_tm","cos_i_tr","low_v_diff_tm","low_v_diff_tr","loss_i_tm","loss_i_tr","over_i_tm","over_i_tr","vmax_tm","vmax_tr",
+    "min_indicator","min_weight","top_limit"
+]
+
+def thresholds_to_df(session) -> pd.DataFrame:
+    rows = []
+    for k in THRESH_KEYS:
+        if k in session:
+            rows.append({"parameter": k, "value": session[k]})
+    return pd.DataFrame(rows)
+
+
+def to_excel_bytes(sheets: dict) -> bytes:
+    """Create an in-memory XLSX containing multiple sheets.
+    `sheets` is a dict of {sheet_name: DataFrame/array-like}.
+    """
+    output = io.BytesIO()
+    try:
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            for name, df in sheets.items():
+                try:
+                    df_to_write = df if isinstance(df, pd.DataFrame) else pd.DataFrame(df)
+                    df_to_write.to_excel(writer, sheet_name=str(name)[:31], index=False)
+                except Exception:
+                    pd.DataFrame().to_excel(writer, sheet_name=str(name)[:31], index=False)
+    except Exception:
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            for name, df in sheets.items():
+                try:
+                    df_to_write = df if isinstance(df, pd.DataFrame) else pd.DataFrame(df)
+                    df_to_write.to_excel(writer, sheet_name=str(name)[:31], index=False)
+                except Exception:
+                    pd.DataFrame().to_excel(writer, sheet_name=str(name)[:31], index=False)
+    return output.getvalue()
 
 # ---------- ML utilities ---------- #
 FITUR_TEKNIS = [
@@ -204,7 +245,7 @@ if st.button("🔒 Logout", key="logout_button", help="Keluar dari dashboard"):
     st.rerun()
 
 # ===================== Tabs ===================== #
-tab_amr, tab_pasca, tab_prabayar = st.tabs(["📥 AMR Harian", "💳 Pascabayar", "💡 Prabayar"])
+tab_amr, tab_pasca, tab_prabayar = st.tabs(["📥 AMR", "💳 Pascabayar", "💡 Prabayar"])
 
 # ===================== AMR Harian ===================== #
 with tab_amr:
@@ -337,10 +378,24 @@ with tab_amr:
             col3.metric("🎯 Pelanggan Potensial TO", int((result['Skor'] > 0).sum()))
 
             st.subheader("🏆 Top 50 Rekomendasi Target Operasi (unik per IDPEL)")
-            st.download_button("📥 Download Hasil Lengkap (Excel)",
-                               data=result.to_csv(index=False).encode('utf-8'),
-                               file_name="hasil_target_operasi_amr.csv",
-                               mime="text/csv")
+            # Paket hasil AMR (Excel + data pendukung)
+sheets = {
+    "TO_Scored_All": result.drop_duplicates(subset='LOCATION_CODE').sort_values('Skor', ascending=False),
+    "TopN": top50[kolom_tampil],
+    "Per_Indikator_Aggregate": indikator_agg,
+    "Baris_Histori_Indikator": indikator_df,
+    "Info_Pelanggan_Terbaru": df_info,
+    "Ambang_Threshold": thresholds_to_df(st.session_state),
+    "Metadata": pd.DataFrame([{
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "records_customer": len(df)
+    }])
+}
+buf = to_excel_bytes(sheets)
+st.download_button("📥 Download Paket Hasil (Excel)",
+                   data=buf,
+                   file_name="hasil_target_operasi_amr.xlsx",
+                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             kolom_tampil = ['LOCATION_CODE','NAMA','TARIF','DAYA'] + \
                            [k for k in INDIKATOR_BOBOT.keys() if k in result.columns] + \
                            ['Jumlah Berulang','Jumlah Indikator','Skor']
@@ -370,10 +425,11 @@ with tab_amr:
                     detail_df = result[result["LOCATION_CODE"].astype(str).isin(id_list)][["LOCATION_CODE","NAMA","TARIF","DAYA"]].drop_duplicates(subset="LOCATION_CODE")
                     st.subheader(f"📋 Daftar IDPEL untuk indikator: **{selected_indicator}** (unik: {len(detail_df)})")
                     st.dataframe(detail_df, use_container_width=True, height=400)
-                    st.download_button("📥 Download daftar IDPEL (CSV)",
-                                       detail_df.to_csv(index=False).encode('utf-8'),
-                                       file_name=f"idpel_{selected_indicator}.csv",
-                                       mime="text/csv")
+                    buf = to_excel_bytes({f"IDPEL_{selected_indicator}": detail_df})
+st.download_button("📥 Download daftar IDPEL (Excel)",
+                   data=buf,
+                   file_name=f"idpel_{selected_indicator}.xlsx",
+                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 else:
                     st.warning("Indikator tidak ditemukan di data.")
 
@@ -465,10 +521,24 @@ with tab_amr:
                 st.dataframe(df_show, use_container_width=True, height=520)
 
                 # simpan & unduh
-                st.download_button("📥 Download Hasil Anomali (CSV)",
-                                   df_res[df_res["is_anomali"]==1][["LOCATION_CODE","skor_anomali","alasan"] + [c for c in ["NAMA","TARIF","DAYA"] if c in df_res.columns]].to_csv(index=False).encode('utf-8'),
-                                   file_name="hasil_ml_anomali.csv",
-                                   mime="text/csv")
+                sheets_ml = {
+    "Anomali_Terpilih": df_res[df_res["is_anomali"]==1][show_cols],
+    "Semua_Skor": df_res,
+    "Dataset_ML": df_ml,
+    "Fitur_Digunakan": pd.DataFrame({"fitur": fitur_pakai}),
+    "Param_Model": pd.DataFrame([{
+        "contamination": float(contam_pct),
+        "scaler": scaler_choice,
+        "seed": int(seed),
+        "unit_opt": unit_opt,
+        "agg_opt": agg_opt if agg_opt else ""
+    }])
+}
+buf_ml = to_excel_bytes(sheets_ml)
+st.download_button("📥 Download Paket Hasil ML (Excel)",
+                   data=buf_ml,
+                   file_name="hasil_ml_anomali.xlsx",
+                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
                 # Daftar TO dari ML (opsional)
                 if "to_list_ml" not in st.session_state:
@@ -482,17 +552,19 @@ with tab_amr:
                     st.info(f"Daftar TO (ML) saat ini: {len(list_to)} IDPEL.")
                     df_to_view = pd.DataFrame({"LOCATION_CODE": list_to})
                     st.dataframe(df_to_view, use_container_width=True, height=200)
-                    st.download_button("📥 Download Daftar TO (ML)",
-                                       df_to_view.to_csv(index=False).encode('utf-8'),
-                                       file_name="daftar_to_ml.csv",
-                                       mime="text/csv")
+                    buf_list = to_excel_bytes({"Daftar_TO_ML": df_to_view})
+st.download_button("📥 Download Daftar TO (ML)",
+                   data=buf_list,
+                   file_name="daftar_to_ml.xlsx",
+                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                     if st.button("🗑️ Kosongkan Daftar TO (ML)"):
                         st.session_state["to_list_ml"] = set()
                         st.success("Daftar TO (ML) dikosongkan.")
 
     # --------- Sub-tab Upload --------- #
     with sub_upload:
-        uploaded_file = st.file_uploader("📥 Upload File Excel AMR Harian", type=["xlsx"])
+        uploaded_file = st.file_uploader("📥 Upload File Excel AMR", type=["xlsx"])\
+        
         if uploaded_file:
             df_up = pd.read_excel(uploaded_file, sheet_name=0)
             df_up = df_up.dropna(subset=['LOCATION_CODE'])
@@ -621,10 +693,25 @@ with tab_pasca:
         df_to = risk_df[risk_df["skor"] >= skor_threshold].sort_values("skor", ascending=False)
         st.metric("Pelanggan Berpotensi TO", len(df_to))
         st.dataframe(df_to.head(1000), use_container_width=True)
-        st.download_button("📄 Download Target Operasi Pascabayar",
-                           df_to.to_csv(index=False).encode(),
-                           file_name="target_operasi_pascabayar.csv",
-                           mime="text/csv")
+        pivot_kwh = df_filtered.pivot_table(index="IDPEL", columns="THBLREK", values="PEMKWH", aggfunc="mean") if not df_filtered.empty else pd.DataFrame()
+pivot_jam = df_filtered.pivot_table(index="IDPEL", columns="THBLREK", values="JAMNYALA", aggfunc="mean") if not df_filtered.empty else pd.DataFrame()
+sheets_pasca = {
+    "TO_Pascabayar": df_to,
+    "Risk_Base": risk_df,
+    "Pivot_KWH": pivot_kwh,
+    "Pivot_JAMNYALA": pivot_jam,
+    "Parameter": pd.DataFrame([{
+        "min_jamnyala": min_jamnyala,
+        "min_kwh_mean": min_kwh_mean,
+        "max_std": max_std,
+        "skor_threshold": skor_threshold
+    }])
+}
+buf_pasca = to_excel_bytes(sheets_pasca)
+st.download_button("📄 Download Paket Pascabayar (Excel)",
+                   data=buf_pasca,
+                   file_name="target_operasi_pascabayar.xlsx",
+                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
         st.info("Belum ada data histori OLAP pascabayar. Silakan upload terlebih dahulu.")
 
@@ -640,6 +727,8 @@ with tab_prabayar:
         st.dataframe(df.head(50), use_container_width=True)
         fig = px.histogram(df, x="skor_risiko", color="skor_risiko", title="Distribusi Risiko Prabayar")
         st.plotly_chart(fig, use_container_width=True)
-        st.download_button("📤 Download Excel", df.to_csv(index=False).encode(), file_name="hasil_prabayar.csv", mime="text/csv")
+        dist = df['skor_risiko'].value_counts().rename_axis('kelas').reset_index(name='jumlah')
+buf_pre = to_excel_bytes({"Data": df, "Distribusi_Risiko": dist})
+st.download_button("📤 Download Excel", data=buf_pre, file_name="hasil_prabayar.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
         st.info("Silakan upload file Excel pelanggan prabayar.")
