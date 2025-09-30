@@ -401,15 +401,31 @@ with tab_amr:
 
             if selected_indicator:
                 if selected_indicator in indikator_agg.columns:
-                    id_list = indikator_agg.loc[indikator_agg[selected_indicator] == True, "LOCATION_CODE"].astype(str).unique().tolist()
-                    detail_df = result[result["LOCATION_CODE"].astype(str).isin(id_list)][["LOCATION_CODE","NAMA","TARIF","DAYA"]].drop_duplicates(subset="LOCATION_CODE")
-                    st.subheader(f"📋 Daftar IDPEL untuk indikator: **{selected_indicator}** (unik: {len(detail_df)})")
+                    id_list = (
+                        indikator_agg.loc[indikator_agg[selected_indicator] == True, "LOCATION_CODE"]
+                        .astype(str)
+                        .unique()
+                        .tolist()
+                    )
+                    detail_df = (
+                        result[result["LOCATION_CODE"].astype(str).isin(id_list)][
+                            ["LOCATION_CODE", "NAMA", "TARIF", "DAYA"]
+                        ]
+                        .drop_duplicates(subset="LOCATION_CODE")
+                    )
+                    st.subheader(
+                        f"📋 Daftar IDPEL untuk indikator: **{selected_indicator}** (unik: {len(detail_df)})"
+                    )
                     st.dataframe(detail_df, use_container_width=True, height=400)
+
+                    # Download daftar IDPEL + data pendukung (Excel)
                     buf = to_excel_bytes({f"IDPEL_{selected_indicator}": detail_df})
-st.download_button("📥 Download daftar IDPEL (Excel)",
-                   data=buf,
-                   file_name=f"idpel_{selected_indicator}.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    st.download_button(
+                        "📥 Download daftar IDPEL (Excel)",
+                        data=buf,
+                        file_name=f"idpel_{selected_indicator}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
                 else:
                     st.warning("Indikator tidak ditemukan di data.")
 
