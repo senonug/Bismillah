@@ -49,95 +49,6 @@ def _numericize(df: pd.DataFrame, cols: list) -> pd.DataFrame:
             df[c] = 0.0
     return df
 
-
-# ---------- Export helpers (Excel with raw support & siang/malam) ---------- #
-from io import BytesIO
-
-SIANG_START = 6   # 06:00
-SIANG_END   = 18  # 18:00
-
-RAW_SUPPORT_COLS = [
-    "WAKTU",
-    "VOLTAGE_L1","VOLTAGE_L2","VOLTAGE_L3",
-    "CURRENT_L1","CURRENT_L2","CURRENT_L3","CURRENT_N",
-    "VOLTAGE_ANGLE_L1","VOLTAGE_ANGLE_L2","VOLTAGE_ANGLE_L3",
-    "CURRENT_ANGLE_L1","CURRENT_ANGLE_L2","CURRENT_ANGLE_L3",
-    "POWER_FACTOR_L1","POWER_FACTOR_L2","POWER_FACTOR_L3",
-    "ACTIVE_POWER_L1","ACTIVE_POWER_L2","ACTIVE_POWER_L3","ACTIVE_POWER_TOTAL",
-    "KWH_ABS_TOTAL",
-    "APPARENT_POWER_L1","APPARENT_POWER_L2","APPARENT_POWER_L3"
-]
-
-def _ensure_datetime(df, col="WAKTU"):
-    if col in df.columns and not pd.api.types.is_datetime64_any_dtype(df[col]):
-        df[col] = pd.to_datetime(df[col], errors="coerce")
-    return df
-
-def compute_siang_malam(df_raw, id_col="LOCATION_CODE"):
-    """Agregasi Active Power siang & malam per IDPEL."""
-    if "ACTIVE_POWER_TOTAL" not in df_raw.columns or "WAKTU" not in df_raw.columns:
-        # Tidak ada kolom yang diperlukan, kembalikan kosong agar tidak error
-        return pd.DataFrame({id_col: [], "ACTIVE_POWER_SIANG_AVG": [], "COUNT_SIANG": [],
-                             "ACTIVE_POWER_MALAM_AVG": [], "COUNT_MALAM": []})
-
-    df = df_raw.copy()
-    df = _ensure_datetime(df, "WAKTU")
-    jam = df["WAKTU"].dt.hour
-    is_siang = (jam >= SIANG_START) & (jam < SIANG_END)
-    df_siang = df[is_siang]
-    df_malam = df[~is_siang]
-
-    agg_siang = df_siang.groupby(id_col).agg(
-        ACTIVE_POWER_SIANG_AVG=("ACTIVE_POWER_TOTAL", "mean"),
-        COUNT_SIANG=("ACTIVE_POWER_TOTAL", "size")
-    )
-    agg_malam = df_malam.groupby(id_col).agg(
-        ACTIVE_POWER_MALAM_AVG=("ACTIVE_POWER_TOTAL", "mean"),
-        COUNT_MALAM=("ACTIVE_POWER_TOTAL", "size")
-    )
-    out = agg_siang.join(agg_malam, how="outer").reset_index()
-    return out
-
-def build_export_bytes(df_ringkasan, df_raw_all, id_col="LOCATION_CODE"):
-    """Susun workbook Excel:
-      - Sheet 'Ringkasan TO'  : ringkasan + kolom siang/malam
-      - Sheet 'Pendukung (Raw)': baris raw untuk IDPEL terpilih + kolom pendukung
-      - Sheet 'Siang vs Malam': agregasi per IDPEL
-      - Sheet '_Log'          : metadata
-    """
-    idpels = df_ringkasan[id_col].dropna().astype(str).unique().tolist()
-
-    # Siang/malam
-    df_siang_malam = compute_siang_malam(df_raw_all, id_col=id_col)
-    ringkasan_plus = df_ringkasan.merge(df_siang_malam, on=id_col, how="left")
-
-    # Pendukung (Raw)
-    keep_identity = [c for c in [id_col, "NAMA", "TARIF", "DAYA"] if c in df_raw_all.columns]
-    keep_cols = keep_identity + [c for c in RAW_SUPPORT_COLS if c in df_raw_all.columns]
-    if keep_cols:
-        df_raw_filtered = df_raw_all[df_raw_all[id_col].astype(str).isin(idpels)][keep_cols].copy()
-        df_raw_filtered = _ensure_datetime(df_raw_filtered, "WAKTU")
-        sort_cols = [c for c in [id_col, "WAKTU"] if c in df_raw_filtered.columns]
-        if sort_cols:
-            df_raw_filtered = df_raw_filtered.sort_values(sort_cols)
-    else:
-        df_raw_filtered = pd.DataFrame()
-
-    siang_malam_sheet = df_siang_malam.copy()
-
-    bio = BytesIO()
-    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-        ringkasan_plus.to_excel(writer, index=False, sheet_name="Ringkasan TO")
-        if not df_raw_filtered.empty:
-            df_raw_filtered.to_excel(writer, index=False, sheet_name="Pendukung (Raw)")
-        siang_malam_sheet.to_excel(writer, index=False, sheet_name="Siang vs Malam")
-        meta = pd.DataFrame({
-            "Parameter": ["SIANG_START", "SIANG_END", "GeneratedAt"],
-            "Value": [SIANG_START, SIANG_END, pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")]
-        })
-        meta.to_excel(writer, index=False, sheet_name="_Log")
-    bio.seek(0)
-    return bio
 # ---------- ML utilities ---------- #
 FITUR_TEKNIS = [
     "CURRENT_L1","CURRENT_L2","CURRENT_L3",
@@ -426,17 +337,10 @@ with tab_amr:
             col3.metric("🎯 Pelanggan Potensial TO", int((result['Skor'] > 0).sum()))
 
             st.subheader("🏆 Top 50 Rekomendasi Target Operasi (unik per IDPEL)")
-            
-# Build Excel with detail sheets
-_bio = build_export_bytes(result, df)  # result: ringkasan, df: raw harian
-_fname = f"hasil_target_operasi_amr_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-st.download_button(
-    "📥 Download Hasil Lengkap (Excel)",
-    data=_bio.getvalue(),
-    file_name=_fname,
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
+            st.download_button("📥 Download Hasil Lengkap (Excel)",
+                               data=result.to_csv(index=False).encode('utf-8'),
+                               file_name="hasil_target_operasi_amr.csv",
+                               mime="text/csv")
             kolom_tampil = ['LOCATION_CODE','NAMA','TARIF','DAYA'] + \
                            [k for k in INDIKATOR_BOBOT.keys() if k in result.columns] + \
                            ['Jumlah Berulang','Jumlah Indikator','Skor']
