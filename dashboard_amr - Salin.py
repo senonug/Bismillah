@@ -41,7 +41,7 @@ def _ensure_customer_cols(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = "-"
     return df
 
-def _numericize()
+def _numericize():
 TECH_COLS = [
     "VOLTAGE_L1","VOLTAGE_L2","VOLTAGE_L3",
     "CURRENT_L1","CURRENT_L2","CURRENT_L3","CURRENT_N",
