@@ -41,7 +41,13 @@ def _ensure_customer_cols(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = "-"
     return df
 
-def _numericize
+def _numericize(df: pd.DataFrame, cols: list) -> pd.DataFrame:
+    for c in cols:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+        else:
+            df[c] = 0.0
+    return df
 TECH_COLS = [
     "VOLTAGE_L1","VOLTAGE_L2","VOLTAGE_L3",
     "CURRENT_L1","CURRENT_L2","CURRENT_L3","CURRENT_N",
