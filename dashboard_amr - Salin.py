@@ -1,4 +1,4 @@
-
+from io import BytesIO
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -41,7 +41,33 @@ def _ensure_customer_cols(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = "-"
     return df
 
-def _numericize(df: pd.DataFrame, cols: list) -> pd.DataFrame:
+def _numericize
+TECH_COLS = [
+    "VOLTAGE_L1","VOLTAGE_L2","VOLTAGE_L3",
+    "CURRENT_L1","CURRENT_L2","CURRENT_L3","CURRENT_N",
+    "VOLTAGE_ANGLE_L1","VOLTAGE_ANGLE_L2","VOLTAGE_ANGLE_L3",
+    "CURRENT_ANGLE_L1","CURRENT_ANGLE_L2","CURRENT_ANGLE_L3",
+    "POWER_FACTOR_L1","POWER_FACTOR_L2","POWER_FACTOR_L3",
+    "ACTIVE_POWER_L1","ACTIVE_POWER_L2","ACTIVE_POWER_L3","ACTIVE_POWER_TOTAL",
+    "KWH_ABS_TOTAL",
+    "APPARENT_POWER_L1","APPARENT_POWER_L2","APPARENT_POWER_L3",
+    "BILL_REFF_KWH"
+]
+
+def make_xlsx_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
+    """Return DataFrame as XLSX bytes with reasonable column widths."""
+    out = BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+        ws = writer.sheets[sheet_name]
+        for i, col in enumerate(df.columns):
+            try:
+                width = min(40, max(10, int(df[col].astype(str).str.len().quantile(0.9)) + 2))
+            except Exception:
+                width = 16
+            ws.set_column(i, i, width)
+    return out.getvalue()
+(df: pd.DataFrame, cols: list) -> pd.DataFrame:
     for c in cols:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
@@ -314,14 +340,20 @@ with tab_amr:
                 df_info = df.drop_duplicates(subset='LOCATION_CODE', keep='last')
 
             # Konsistensi nama kolom
-            if 'TARIF' in df_info.columns:
-                tarif_col = 'TARIF'
-            else:
-                tarif_col = 'TARIFF' if 'TARIFF' in df_info.columns else None
-            use_cols = ['LOCATION_CODE', 'NAMA_PELANGGAN'] + ([tarif_col] if tarif_col else []) + ['POWER']
-            df_info = df_info[use_cols].rename(columns={'NAMA_PELANGGAN': 'NAMA','TARIFF':'TARIF','POWER':'DAYA'})
-            if 'TARIF' not in df_info.columns: df_info['TARIF'] = '-'
-            if 'DAYA' not in df_info.columns: df_info['DAYA'] = '-'
+	    if 'TARIF' in df_info.columns:
+   					tarif_col = 'TARIF'
+	    else:
+    					tarif_col = 'TARIFF' if 'TARIFF' in df_info.columns else None
+
+	    tech_cols_present = [c for c in TECH_COLS if c in df_info.columns]
+
+	    use_cols = ['LOCATION_CODE', 'NAMA_PELANGGAN'] + ([tarif_col] if tarif_col else []) + ['POWER'] + tech_cols_present
+	    df_info = df_info[use_cols].rename(columns={'NAMA_PELANGGAN': 'NAMA','TARIFF':'TARIF','POWER':'DAYA'})
+
+	    # pastikan ada kolom TARIF & DAYA walau kosong
+	    if 'TARIF' not in df_info.columns: df_info['TARIF'] = '-'
+	    if 'DAYA' not in df_info.columns: df_info['DAYA'] = '-'
+
 
             result = df_info.merge(indikator_agg, on='LOCATION_CODE', how='right')
             for c in ['NAMA','TARIF','DAYA']:
@@ -337,10 +369,23 @@ with tab_amr:
             col3.metric("🎯 Pelanggan Potensial TO", int((result['Skor'] > 0).sum()))
 
             st.subheader("🏆 Top 50 Rekomendasi Target Operasi (unik per IDPEL)")
-            st.download_button("📥 Download Hasil Lengkap (Excel)",
-                               data=result.to_csv(index=False).encode('utf-8'),
-                               file_name="hasil_target_operasi_amr.csv",
-                               mime="text/csv")
+
+	    # susun kolom ekspor: identitas + teknis + indikator + metrik
+	    tech_cols_present = [c for c in TECH_COLS if c in result.columns]
+	    indikator_cols_order = [k for k in INDIKATOR_BOBOT.keys() if k in result.columns]
+	    export_cols = (['LOCATION_CODE','NAMA','TARIF','DAYA'] + tech_cols_present +
+               								indikator_cols_order + ['Jumlah Berulang','Jumlah Indikator','Skor'])
+
+	    result_export = result.copy()
+	    for c in export_cols:
+    					if c not in result_export.columns:
+       						 result_export[c] = np.nan
+	    result_export = result_export[export_cols]
+
+	    st.download_button("📥 Download Hasil Lengkap (XLSX)",
+                   								data=make_xlsx_bytes(result_export, sheet_name="TO_AMR"),
+                   								file_name="hasil_target_operasi_amr.xlsx",
+                  								 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             kolom_tampil = ['LOCATION_CODE','NAMA','TARIF','DAYA'] + \
                            [k for k in INDIKATOR_BOBOT.keys() if k in result.columns] + \
                            ['Jumlah Berulang','Jumlah Indikator','Skor']
@@ -367,13 +412,17 @@ with tab_amr:
             if selected_indicator:
                 if selected_indicator in indikator_agg.columns:
                     id_list = indikator_agg.loc[indikator_agg[selected_indicator] == True, "LOCATION_CODE"].astype(str).unique().tolist()
-                    detail_df = result[result["LOCATION_CODE"].astype(str).isin(id_list)][["LOCATION_CODE","NAMA","TARIF","DAYA"]].drop_duplicates(subset="LOCATION_CODE")
-                    st.subheader(f"📋 Daftar IDPEL untuk indikator: **{selected_indicator}** (unik: {len(detail_df)})")
-                    st.dataframe(detail_df, use_container_width=True, height=400)
-                    st.download_button("📥 Download daftar IDPEL (CSV)",
-                                       detail_df.to_csv(index=False).encode('utf-8'),
-                                       file_name=f"idpel_{selected_indicator}.csv",
-                                       mime="text/csv")
+                    tech_cols_present = [c for c in TECH_COLS if c in result.columns]
+		    base_cols = ["LOCATION_CODE","NAMA","TARIF","DAYA"]
+		    cols_daftar = base_cols + tech_cols_present
+
+		    detail_df = (result[result["LOCATION_CODE"].astype(str).isin(id_list)][cols_daftar]
+             										.drop_duplicates(subset="LOCATION_CODE"))
+
+		    st.download_button("📥 Download daftar IDPEL (XLSX)",
+                   											data=make_xlsx_bytes(detail_df, sheet_name=f"IDPEL_{selected_indicator}"),
+                   											file_name=f"idpel_{selected_indicator}.xlsx",
+                  											mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 else:
                     st.warning("Indikator tidak ditemukan di data.")
 
